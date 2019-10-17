@@ -15,3 +15,8 @@ Run `sbt package` task
 ## Spark submit
 
 `spark-submit --class TopDownSpecialization --master local target/scala-2.12/code_2.12-0.1.jar <pathToInputDataset>`
+
+# Useful documentation
+
+[Submitting Applications](https://spark.apache.org/docs/latest/submitting-applications.html)
+[Set up Apache Spark on a Multi-Node Cluster](https://medium.com/ymedialabs-innovation/apache-spark-on-a-multi-node-cluster-b75967c8cb2b)
