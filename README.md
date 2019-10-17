@@ -19,4 +19,5 @@ Run `sbt package` task
 # Useful documentation
 
 [Submitting Applications](https://spark.apache.org/docs/latest/submitting-applications.html)  
-[Set up Apache Spark on a Multi-Node Cluster](https://medium.com/ymedialabs-innovation/apache-spark-on-a-multi-node-cluster-b75967c8cb2b)
+[Set up Apache Spark on a Multi-Node Cluster](https://medium.com/ymedialabs-innovation/apache-spark-on-a-multi-node-cluster-b75967c8cb2b)  
+[Installing Spark Standalone to a Cluster](https://spark.apache.org/docs/latest/spark-standalone.html)
