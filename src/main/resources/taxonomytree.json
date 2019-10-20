@@ -1,0 +1,499 @@
+{
+  "education": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "Without-Post-Secondary",
+        "leaves": [
+          {
+            "parent": "Preschool",
+            "leaves": []
+          },
+          {
+            "parent": "Elementary",
+            "leaves": [
+              {
+                "parent": "1st-4th",
+                "leaves": []
+              },
+              {
+                "parent": "5th-6th",
+                "leaves": []
+              },
+              {
+                "parent": "7th-8th",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Secondary",
+            "leaves": [
+              {
+                "parent": "Junior-Secondary",
+                "leaves": [
+                  {
+                    "parent": "9th",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "10th",
+                    "leaves": []
+                  }
+                ]
+              },
+              {
+                "parent": "Senior-Secondary",
+                "leaves": [
+                  {
+                    "parent": "11th",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "12th",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "HS-grad",
+                    "leaves": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "parent": "Post-secondary",
+        "leaves": [
+          {
+            "parent": "Some-college",
+            "leaves": []
+          },
+          {
+            "parent": "Assoc",
+            "leaves": [
+              {
+                "parent": "Assoc-acdm",
+                "leaves": []
+              },
+              {
+                "parent": "Assoc-voc",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "University",
+            "leaves": [
+              {
+                "parent": "Bachelors",
+                "leaves": []
+              },
+              {
+                "parent": "Prof-school",
+                "leaves": []
+              },
+              {
+                "parent": "Post-grad",
+                "leaves": [
+                  {
+                    "parent": "Masters",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "Doctorate",
+                    "leaves": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "marital-status": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "Married",
+        "leaves": [
+          {
+            "parent": "Partner-present",
+            "leaves": [
+              {
+                "parent": "Married-civ-spouse",
+                "leaves": []
+              },
+              {
+                "parent": "Married-AF-spouse",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Partner-absent",
+            "leaves": [
+              {
+                "parent": "Divorced",
+                "leaves": []
+              },
+              {
+                "parent": "Separated",
+                "leaves": []
+              },
+              {
+                "parent": "Widowed",
+                "leaves": []
+              },
+              {
+                "parent": "Married-spouse-absent",
+                "leaves": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "parent": "Never-married",
+        "leaves": []
+      }
+    ]
+  },
+  "occupation": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "White-collar",
+        "leaves": [
+          {
+            "parent": "Exec-managerial",
+            "leaves": []
+          },
+          {
+            "parent": "Prof-specialty",
+            "leaves": []
+          },
+          {
+            "parent": "Sales",
+            "leaves": []
+          },
+          {
+            "parent": "Adm-clerical",
+            "leaves": []
+          }
+        ]
+      },
+      {
+        "parent": "Blue-collar",
+        "leaves": [
+          {
+            "parent": "Tech-support",
+            "leaves": []
+          },
+          {
+            "parent": "Craft-repair",
+            "leaves": []
+          },
+          {
+            "parent": "Machine-op-inspct",
+            "leaves": []
+          },
+          {
+            "parent": "Handlers-cleaners",
+            "leaves": []
+          },
+          {
+            "parent": "Transport-moving",
+            "leaves": []
+          },
+          {
+            "parent": "Priv-house-serv",
+            "leaves": []
+          }
+        ]
+      },
+      {
+        "parent": "Other",
+        "leaves": [
+          {
+            "parent": "Protective-serv",
+            "leaves": []
+          },
+          {
+            "parent": "Armed-Forces",
+            "leaves": []
+          },
+          {
+            "parent": "Farming-fishing",
+            "leaves": []
+          },
+          {
+            "parent": "Other-service",
+            "leaves": []
+          }
+        ]
+      }
+    ]
+  },
+  "native-country": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "North-America",
+        "leaves": [
+          {
+            "parent": "USA",
+            "leaves": [
+              {
+                "parent": "United-States",
+                "leaves": []
+              },
+              {
+                "parent": "Outlying-US(Guam-USVI-etc)",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Canada",
+            "leaves": []
+          }
+        ]
+      },
+      {
+        "parent": "Middle-America",
+        "leaves": [
+          {
+            "parent": "Mexico",
+            "leaves": []
+          },
+          {
+            "parent": "Honduras",
+            "leaves": []
+          },
+          {
+            "parent": "Guatemala",
+            "leaves": []
+          },
+          {
+            "parent": "Nicaragua",
+            "leaves": []
+          },
+          {
+            "parent": "El-Salvador",
+            "leaves": []
+          }
+        ]
+      },
+      {
+        "parent": "South-America",
+        "leaves": [
+          {
+            "parent": "Western-South-America",
+            "leaves": [
+              {
+                "parent": "Ecuador",
+                "leaves": []
+              },
+              {
+                "parent": "Peru",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Northern-South-America",
+            "leaves": [
+              {
+                "parent": "Columbia",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Caribbean",
+            "leaves": [
+              {
+                "parent": "Puerto-Rico",
+                "leaves": []
+              },
+              {
+                "parent": "Dominican-Republic",
+                "leaves": []
+              },
+              {
+                "parent": "Jamaica",
+                "leaves": []
+              },
+              {
+                "parent": "Cuba",
+                "leaves": []
+              },
+              {
+                "parent": "Haiti",
+                "leaves": []
+              },
+              {
+                "parent": "Trinadad&Tobago",
+                "leaves": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "parent": "Europe",
+        "leaves": [
+          {
+            "parent": "Western-Europe",
+            "leaves": [
+              {
+                "parent": "France",
+                "leaves": []
+              },
+              {
+                "parent": "England",
+                "leaves": []
+              },
+              {
+                "parent": "Ireland",
+                "leaves": []
+              },
+              {
+                "parent": "Scotland",
+                "leaves": []
+              },
+              {
+                "parent": "Holand-Netherlands",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Southern-Europe",
+            "leaves": [
+              {
+                "parent": "Italy",
+                "leaves": []
+              },
+              {
+                "parent": "Greece",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Southwestern-Europe",
+            "leaves": [
+              {
+                "parent": "Portugal",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Southeastern-Europe",
+            "leaves": [
+              {
+                "parent": "Yugoslavia",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Central-Europe",
+            "leaves": [
+              {
+                "parent": "Hungary",
+                "leaves": []
+              },
+              {
+                "parent": "Germany",
+                "leaves": []
+              },
+              {
+                "parent": "Poland",
+                "leaves": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "parent": "Asia",
+        "leaves": [
+          {
+            "parent": "Southeastern-Asia",
+            "leaves": [
+              {
+                "parent": "Philippines",
+                "leaves": []
+              },
+              {
+                "parent": "Thailand",
+                "leaves": []
+              },
+              {
+                "parent": "Cambodia",
+                "leaves": []
+              },
+              {
+                "parent": "Vietnam",
+                "leaves": []
+              },
+              {
+                "parent": "Laos",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Southern-Asia",
+            "leaves": [
+              {
+                "parent": "India",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Eastern-Asia",
+            "leaves": [
+              {
+                "parent": "Japan",
+                "leaves": []
+              },
+              {
+                "parent": "China",
+                "leaves": []
+              },
+              {
+                "parent": "Hong",
+                "leaves": []
+              },
+              {
+                "parent": "Taiwan",
+                "leaves": []
+              },
+              {
+                "parent": "South",
+                "leaves": []
+              }
+            ]
+          },
+          {
+            "parent": "Middle-East",
+            "leaves": [
+              {
+                "parent": "Iran",
+                "leaves": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
