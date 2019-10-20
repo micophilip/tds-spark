@@ -1,6 +1,7 @@
 import argonaut.Argonaut._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
+import scala.math._
 
 import scala.io.Source
 
@@ -10,6 +11,8 @@ object TopDownSpecialization extends Serializable {
 
     val spark = SparkSession.builder().appName("TopDownSpecialization")
       .config("spark.master", "local").getOrCreate()
+
+    import spark.implicits._
 
     val inputPath = args(0)
     val taxonomyTreePath = args(1)
@@ -37,8 +40,14 @@ object TopDownSpecialization extends Serializable {
     // Step 1.1: All non quasi-identifier attributes are removed
     val subset = input.select(QIDs.head, QIDs.tail: _*) //Pass each element of QID as its own argument to select
 
+    println("Dataset with QIDs selected")
+    subset.show()
+
     // Step 1.2: Tuples with the same quasi-identifier values are grouped together
     val subsetWithK = subset.groupBy(QIDs.head, QIDs.tail: _*).count()
+
+    println("Dataset grouped by QIDs")
+    subsetWithK.show()
 
     /*
      * Step 2: Generalization
@@ -48,7 +57,13 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
     val anonymizationLevels = taxonomyTreeString.parseOption.get
 
+    // Step 2.1: Calculate scores for education_any taxonomy tree
+
     spark.stop()
+  }
+
+  def log2(value: Double): Double = {
+    log(value) / log(2.0)
   }
 
 }
