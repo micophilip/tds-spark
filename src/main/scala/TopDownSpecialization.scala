@@ -1,16 +1,17 @@
 import argonaut.Argonaut._
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions._
 import scala.math._
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.lit
 
 import scala.io.Source
 
 object TopDownSpecialization extends Serializable {
 
-  def main(args: Array[String]) = {
+  val spark = SparkSession.builder().appName("TopDownSpecialization")
+    .config("spark.master", "local").getOrCreate()
 
-    val spark = SparkSession.builder().appName("TopDownSpecialization")
-      .config("spark.master", "local").getOrCreate()
+  def main(args: Array[String]) = {
 
     import spark.implicits._
 
@@ -22,7 +23,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
 
-    val QIDs = List("age", "education", "marital-status", "occupation", "native-country")
+    val QIDs = List("age", "education", "marital-status", "occupation", "native-country", sensitiveAttributeColumn)
 
     val input = spark.read
       .option("header", "true")
@@ -58,6 +59,39 @@ object TopDownSpecialization extends Serializable {
     val anonymizationLevels = taxonomyTreeString.parseOption.get
 
     // Step 2.1: Calculate scores for education_any taxonomy tree
+
+    val fieldToScore = "education"
+
+    val generalizedValue = anonymizationLevels.field(fieldToScore).get.field("parent").get.stringOrEmpty
+
+    val generalizedField = s"${fieldToScore}_parent"
+
+    val subsetAnyEdu = subsetWithK.withColumn(generalizedField, lit(generalizedValue))
+
+    subsetAnyEdu.show()
+
+    val firstSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(0)}' and $generalizedField = '$generalizedValue'").count()
+    val secondSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(1)}' and $generalizedField = '$generalizedValue'").count()
+
+    val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").count()
+
+    println(s"First Numerator: $firstSANumerator")
+    println(s"Second Numerator: $secondSANumerator")
+    println(s"Denominator: $denominator")
+
+    val firstSADivision = firstSANumerator.toDouble / denominator.toDouble
+    val firstEntropy = (-firstSADivision) * log2(firstSADivision)
+
+    println(s"First Entropy: $firstEntropy")
+
+    val secondSADivision = secondSANumerator.toDouble / denominator.toDouble
+    val secondEntropy = (-secondSADivision) * log2(secondSADivision)
+
+    println(s"Second Entropy: $secondEntropy")
+
+    val entropy = firstEntropy + secondEntropy
+
+    println(s"Entropy: $entropy")
 
     spark.stop()
   }
