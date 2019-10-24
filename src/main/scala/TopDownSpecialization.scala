@@ -1,6 +1,6 @@
 import argonaut.Argonaut._
 import argonaut._
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.math._
 import org.apache.spark.sql.functions.col
@@ -23,7 +23,6 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreePath = args(1)
     val k = args(2)
     val sensitiveAttributeColumn = args(3)
-    val countColumn = "count"
 
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
@@ -64,7 +63,32 @@ object TopDownSpecialization extends Serializable {
     val anonymizationLevels = taxonomyTreeString.parseOption.get
 
     // Step 2.1: Calculate scores for education_any taxonomy tree
+    calculateEntropy(anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes)
 
+    spark.stop()
+  }
+
+  def log2(value: Double): Double = {
+    log(value) / log(2.0)
+  }
+
+  //TODO: tailrec, more efficient?
+  def findAncestor(tree: Json, node: String): String = {
+    val parent = tree.field("parent").get.stringOrEmpty
+    val leaves = tree.field("leaves").get.arrayOrEmpty
+
+    leaves.foreach(j => {
+      if (node != j.field("parent").get.stringOrEmpty) {
+        findAncestor(leaves.head, node)
+      }
+    })
+
+    parent
+  }
+
+  def calculateEntropy(anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String]): Double = {
+
+    val countColumn = "count"
     val fieldToScore = "education"
 
     val generalizedValue = anonymizationLevels.field(fieldToScore).get.field("parent").get.stringOrEmpty
@@ -98,25 +122,8 @@ object TopDownSpecialization extends Serializable {
 
     println(s"Entropy: $entropy")
 
-    spark.stop()
-  }
+    entropy
 
-  def log2(value: Double): Double = {
-    log(value) / log(2.0)
-  }
-
-  //TODO: tailrec, more efficient?
-  def findAncestor(tree: Json, node: String): String = {
-    val parent = tree.field("parent").get.stringOrEmpty
-    val leaves = tree.field("leaves").get.arrayOrEmpty
-
-    leaves.foreach(j => {
-      if (node != j.field("parent").get.stringOrEmpty) {
-        findAncestor(leaves.head, node)
-      }
-    })
-
-    parent
   }
 
 }
