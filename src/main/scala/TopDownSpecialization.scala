@@ -5,6 +5,7 @@ import org.apache.spark.sql.SparkSession
 import scala.math._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.sum
 
 import scala.annotation.tailrec
 import scala.io.Source
@@ -22,6 +23,7 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreePath = args(1)
     val k = args(2)
     val sensitiveAttributeColumn = args(3)
+    val countColumn = "count"
 
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
@@ -73,10 +75,10 @@ object TopDownSpecialization extends Serializable {
 
     subsetAnyEdu.show()
 
-    val firstSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(0)}' and $generalizedField = '$generalizedValue'").count()
-    val secondSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(1)}' and $generalizedField = '$generalizedValue'").count()
+    val firstSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(0)}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
+    val secondSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(1)}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
 
-    val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").count()
+    val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
 
     println(s"First Numerator: $firstSANumerator")
     println(s"Second Numerator: $secondSANumerator")
