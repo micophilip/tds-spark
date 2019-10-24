@@ -4,9 +4,11 @@ scalaVersion := "2.12.10"
 
 val sparkVersion = "2.4.4"
 val argonautVersion = "6.2.2"
+val scalaTestVersion = "3.0.8"
 
-libraryDependencies ++= Seq (
+libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion,
   "org.apache.spark" %% "spark-sql" % sparkVersion,
-  "io.argonaut" %% "argonaut" % argonautVersion
+  "io.argonaut" %% "argonaut" % argonautVersion,
+  "org.scalatest" %% "scalatest" % scalaTestVersion % "test"
 )

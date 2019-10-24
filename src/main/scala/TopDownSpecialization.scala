@@ -1,9 +1,12 @@
 import argonaut.Argonaut._
+import argonaut._
 import org.apache.spark.sql.SparkSession
+
 import scala.math._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 
+import scala.annotation.tailrec
 import scala.io.Source
 
 object TopDownSpecialization extends Serializable {
@@ -98,6 +101,20 @@ object TopDownSpecialization extends Serializable {
 
   def log2(value: Double): Double = {
     log(value) / log(2.0)
+  }
+
+  //TODO: tailrec, more efficient?
+  def findAncestor(tree: Json, node: String): String = {
+    val parent = tree.field("parent").get.stringOrEmpty
+    val leaves = tree.field("leaves").get.arrayOrEmpty
+
+    leaves.foreach(j => {
+      if (node != j.field("parent").get.stringOrEmpty) {
+        findAncestor(leaves.head, node)
+      }
+    })
+
+    parent
   }
 
 }
