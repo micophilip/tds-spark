@@ -74,6 +74,8 @@ object TopDownSpecialization extends Serializable {
 
   //TODO: tailrec, more efficient?
   def findAncestor(tree: Json, node: String): String = {
+    // Not all leaves are traversed with current implementation. Algorithm should be:
+    // Parent is the root, traverse every node until we get a match, if no match found findAncestor should return empty (option or empty string TBD)
     val parent = tree.field("parent").get.stringOrEmpty
     val leaves = tree.field("leaves").get.arrayOrEmpty
 
@@ -92,6 +94,15 @@ object TopDownSpecialization extends Serializable {
     val fieldToScore = "education"
 
     val generalizedValue = anonymizationLevels.field(fieldToScore).get.field("parent").get.stringOrEmpty
+
+    val children = anonymizationLevels.field(fieldToScore).get.field("leaves").get.arrayOrEmpty
+
+    // For every child - for now, we know we have two children!
+
+    val firstChild = children(0)
+    val secondChild = children(1)
+
+    // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
 
     val generalizedField = s"${fieldToScore}_parent"
 
