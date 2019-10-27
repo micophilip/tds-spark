@@ -8,6 +8,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.sum
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
 object TopDownSpecialization extends Serializable {
@@ -72,20 +73,21 @@ object TopDownSpecialization extends Serializable {
     log(value) / log(2.0)
   }
 
-  //TODO: tailrec, more efficient?
-  def findAncestor(tree: Json, node: String): String = {
-    // Not all leaves are traversed with current implementation. Algorithm should be:
-    // Parent is the root, traverse every node until we get a match, if no match found findAncestor should return empty (option or empty string TBD)
-    val parent = tree.field("parent").get.stringOrEmpty
-    val leaves = tree.field("leaves").get.arrayOrEmpty
+  //TODO: Check performance - serialized? use tailrec?
+  def containsNode(tree: Json, node: String): Boolean = {
 
-    leaves.foreach(j => {
-      if (node != j.field("parent").get.stringOrEmpty) {
-        findAncestor(leaves.head, node)
-      }
-    })
+    val serialized: ListBuffer[String] = ListBuffer.empty[String]
 
-    parent
+    visit(tree, node)
+
+    def visit(subTree: Json, node: String): Unit = {
+      subTree.field("leaves").get.arrayOrEmpty.foreach(j => {
+        if (j.field("parent").get.stringOrEmpty != node) visit(j, node)
+        else serialized += node
+      })
+    }
+
+    serialized.nonEmpty
   }
 
   def calculateEntropy(anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String]): Double = {
