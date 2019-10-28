@@ -1,11 +1,14 @@
 import argonaut.Argonaut._
 import argonaut._
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.math._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.sum
+import org.apache.spark.sql.functions.when
+import org.apache.spark.sql.functions.udf
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -74,27 +77,38 @@ object TopDownSpecialization extends Serializable {
   }
 
   //TODO: Check performance - serialized? use tailrec?
-  def containsNode(tree: Json, node: String): Boolean = {
+  def findAncestor(tree: Json, node: String): Option[String] = {
 
-    val serialized: ListBuffer[String] = ListBuffer.empty[String]
+    if (node == null) None
+    else {
+      val serialized: ListBuffer[String] = ListBuffer.empty[String]
+      visit(tree, node)
 
-    visit(tree, node)
+      def visit(subTree: Json, node: String): Unit = {
+        subTree.field("leaves").get.arrayOrEmpty.foreach(j => {
+          if (j.field("parent").get.stringOrEmpty != node) visit(j, node)
+          else serialized += node
+        })
+      }
 
-    def visit(subTree: Json, node: String): Unit = {
-      subTree.field("leaves").get.arrayOrEmpty.foreach(j => {
-        if (j.field("parent").get.stringOrEmpty != node) visit(j, node)
-        else serialized += node
-      })
+      if (serialized.nonEmpty) Some(tree.field("parent").get.stringOrEmpty)
+      else None
     }
 
-    serialized.nonEmpty
   }
+
+  def findAncestorUdf(tree: Json): UserDefinedFunction = udf((value: String) => {
+    val result = findAncestor(tree, value)
+    if (result.isEmpty) null
+    else result.get
+  })
 
   def calculateEntropy(anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String]): Double = {
 
     val countColumn = "count"
     val fieldToScore = "education"
 
+    val generalizedField = s"${fieldToScore}_parent"
     val generalizedValue = anonymizationLevels.field(fieldToScore).get.field("parent").get.stringOrEmpty
 
     val children = anonymizationLevels.field(fieldToScore).get.field("leaves").get.arrayOrEmpty
@@ -104,9 +118,10 @@ object TopDownSpecialization extends Serializable {
     val firstChild = children(0)
     val secondChild = children(1)
 
-    // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
+    val firstChildGeneralizedValue = firstChild.field("parent").get.stringOrEmpty
+    val secondChildGeneralizedValue = secondChild.field("parent").get.stringOrEmpty
 
-    val generalizedField = s"${fieldToScore}_parent"
+    // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
 
     val subsetAnyEdu = subsetWithK.withColumn(generalizedField, lit(generalizedValue))
 
@@ -134,6 +149,11 @@ object TopDownSpecialization extends Serializable {
     val entropy = firstEntropy + secondEntropy
 
     println(s"Entropy: $entropy")
+
+    val firstChildEntropyDf = subsetWithK.withColumn(generalizedField, findAncestorUdf(secondChild)(subsetWithK(fieldToScore)))
+
+    //TODO: All fields are null due to the recursive call inside the UDF - not serializable? serialized.nonEmpty is always false, serialize tree first then call contains?
+    firstChildEntropyDf.show()
 
     entropy
 

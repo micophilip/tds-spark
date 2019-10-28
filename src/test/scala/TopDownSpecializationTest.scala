@@ -20,12 +20,16 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
 
     val educationTaxonomyTree = taxonomyTreeJson.field("education").get
 
-    assert(TopDownSpecialization.containsNode(educationTaxonomyTree, "5th-6th"))
-    assert(TopDownSpecialization.containsNode(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "10th"))
-    assert(TopDownSpecialization.containsNode(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "Preschool"))
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree, "5th-6th").contains("Any"))
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "10th").contains("Without-Post-Secondary"))
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "Preschool").contains("Without-Post-Secondary"))
 
-    assert(!TopDownSpecialization.containsNode(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "University"))
-    assert(!TopDownSpecialization.containsNode(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.tail.head, "Elementary"))
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.tail.head, "Assoc-voc").contains("Post-secondary"))
+
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "University").isEmpty)
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.tail.head, "Elementary").isEmpty)
+
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, null).isEmpty)
   }
 
   test("calculateEntropy should accurately calculate entropy") {
