@@ -75,21 +75,22 @@ object TopDownSpecialization extends Serializable {
   def log2(value: Double): Double = {
     log(value) / log(2.0)
   }
-
-  //TODO: Check performance - serialized? use tailrec?
+  
   def findAncestor(tree: Json, node: String): Option[String] = {
 
     if (node == null) None
     else {
       val serialized: ListBuffer[String] = ListBuffer.empty[String]
-      visit(tree, node)
 
-      def visit(subTree: Json, node: String): Unit = {
-        subTree.field("leaves").get.arrayOrEmpty.foreach(j => {
-          if (j.field("parent").get.stringOrEmpty != node) visit(j, node)
-          else serialized += node
-        })
+      @tailrec
+      def visit(subTree: Json, children: JsonArray, node: String): Unit = {
+        children match {
+          case Nil =>
+          case x :: tail => if (x.field("parent").get.stringOrEmpty == node) serialized += node else visit(x, tail ::: x.field("leaves").get.arrayOrEmpty, node)
+        }
       }
+
+      visit(tree, tree.field("leaves").get.arrayOrEmpty, node)
 
       if (serialized.nonEmpty) Some(tree.field("parent").get.stringOrEmpty)
       else None
