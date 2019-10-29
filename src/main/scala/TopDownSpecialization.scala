@@ -99,9 +99,7 @@ object TopDownSpecialization extends Serializable {
   }
 
   def findAncestorUdf(tree: Json): UserDefinedFunction = udf((value: String) => {
-    val result = findAncestor(tree, value)
-    if (result.isEmpty) null
-    else result.get
+    findAncestor(tree, value)
   })
 
   def calculateEntropy(anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String]): Double = {
