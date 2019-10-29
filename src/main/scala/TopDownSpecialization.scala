@@ -75,7 +75,7 @@ object TopDownSpecialization extends Serializable {
   def log2(value: Double): Double = {
     log(value) / log(2.0)
   }
-  
+
   def findAncestor(tree: Json, node: String): Option[String] = {
 
     if (node == null) None
@@ -86,7 +86,7 @@ object TopDownSpecialization extends Serializable {
       def visit(subTree: Json, children: JsonArray, node: String): Unit = {
         children match {
           case Nil =>
-          case x :: tail => if (x.field("parent").get.stringOrEmpty == node) serialized += node else visit(x, tail ::: x.field("leaves").get.arrayOrEmpty, node)
+          case x :: tail => if (x.field("parent").get.stringOrEmpty == node.trim) serialized += node else visit(x, tail ::: x.field("leaves").get.arrayOrEmpty, node)
         }
       }
 
