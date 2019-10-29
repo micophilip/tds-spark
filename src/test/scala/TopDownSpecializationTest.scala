@@ -24,7 +24,7 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "10th").contains("Without-Post-Secondary"))
     assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "Preschool").contains("Without-Post-Secondary"))
 
-    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.tail.head, "Assoc-voc").contains("Post-secondary"))
+    assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.tail.head, "Assoc-voc ").contains("Post-secondary"))
 
     assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head, "University").isEmpty)
     assert(TopDownSpecialization.findAncestor(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.tail.head, "Elementary").isEmpty)
