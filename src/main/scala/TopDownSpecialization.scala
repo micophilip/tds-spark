@@ -126,26 +126,13 @@ object TopDownSpecialization extends Serializable {
 
     subsetAnyEdu.show()
 
-    val firstSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(0)}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
-    val secondSANumerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(1)}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
-
     val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
 
-    println(s"First Numerator: $firstSANumerator")
-    println(s"Second Numerator: $secondSANumerator")
-    println(s"Denominator: $denominator")
-
-    val firstSADivision = firstSANumerator.toDouble / denominator.toDouble
-    val firstEntropy = (-firstSADivision) * log2(firstSADivision)
-
-    println(s"First Entropy: $firstEntropy")
-
-    val secondSADivision = secondSANumerator.toDouble / denominator.toDouble
-    val secondEntropy = (-secondSADivision) * log2(secondSADivision)
-
-    println(s"Second Entropy: $secondEntropy")
-
-    val entropy = firstEntropy + secondEntropy
+    val entropy = sensitiveAttributes.map(sensitiveAttribute => {
+      val numerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
+      val division = numerator.toDouble / denominator.toDouble
+      (-division) * log2(division)
+    }).sum
 
     println(s"Entropy: $entropy")
 
