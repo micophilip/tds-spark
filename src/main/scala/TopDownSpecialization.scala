@@ -82,6 +82,7 @@ object TopDownSpecialization extends Serializable {
     else {
       val serialized: ListBuffer[String] = ListBuffer.empty[String]
 
+      // Breadth-first search
       @tailrec
       def visit(subTree: Json, children: JsonArray, node: String): Unit = {
         children match {
