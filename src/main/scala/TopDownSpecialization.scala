@@ -95,13 +95,13 @@ object TopDownSpecialization extends Serializable {
       def visit(subTree: Json, children: JsonArray, node: String): Unit = {
         children match {
           case Nil =>
-          case x :: tail => if (x.field("parent").get.stringOrEmpty == node.trim) serialized += node else visit(x, tail ::: x.field("leaves").get.arrayOrEmpty, node)
+          case x :: tail => if (getRoot(x) == node.trim) serialized += node else visit(x, tail ::: getChildren(x), node)
         }
       }
 
-      visit(tree, tree.field("leaves").get.arrayOrEmpty, node)
+      visit(tree, getChildren(tree), node)
 
-      if (serialized.nonEmpty) Some(tree.field("parent").get.stringOrEmpty)
+      if (serialized.nonEmpty) Some(getRoot(tree))
       else None
     }
 
