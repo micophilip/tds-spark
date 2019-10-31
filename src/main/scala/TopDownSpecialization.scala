@@ -76,6 +76,14 @@ object TopDownSpecialization extends Serializable {
     log(value) / log(2.0)
   }
 
+  def getRoot(tree: Json): String = {
+    tree.field("parent").get.stringOrEmpty
+  }
+
+  def getChildren(tree: Json): JsonArray = {
+    tree.field("leaves").get.arrayOrEmpty
+  }
+
   def findAncestor(tree: Json, node: String): Option[String] = {
 
     if (node == null) None
