@@ -11,7 +11,9 @@ import org.apache.spark.sql.functions.when
 import org.apache.spark.sql.functions.udf
 
 import scala.annotation.tailrec
+import scala.collection.mutable.Queue
 import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.Map
 import scala.io.Source
 
 object TopDownSpecialization extends Serializable {
@@ -84,24 +86,54 @@ object TopDownSpecialization extends Serializable {
     tree.field("leaves").get.arrayOrEmpty
   }
 
+  @tailrec
+  def getPath(pathMap: Map[String, String], node: String, currentPath: Queue[String]): Queue[String] = {
+    val parent = pathMap.get(node)
+    if (parent.isEmpty) currentPath += node
+    else getPath(pathMap, parent.get, currentPath += node)
+  }
+
   def findAncestor(tree: Json, node: String): Option[String] = {
 
     if (node == null) None
     else {
       val serialized: ListBuffer[String] = ListBuffer.empty[String]
+      //      val path = Queue[Queue[String]]()
+      //TODO: MAJOR CLEAN UP REQUIRED
+      val pathMap = Map[String, String]()
 
       // Breadth-first search
-      @tailrec
-      def visit(subTree: Json, children: JsonArray, node: String): Unit = {
-        children match {
-          case Nil =>
-          case x :: tail => if (getRoot(x) == node.trim) serialized += node else visit(x, tail ::: getChildren(x), node)
+      //      @tailrec
+      def traverse(children: JsonArray, parent: String): Unit = {
+
+        //        val currentPath = Queue[String]()
+
+        if (!children.isEmpty) {
+          children.foreach(child => {
+            //            println(s"I am ${getRoot(child)} and my parent is $parent")
+            //            currentPath += getRoot(child)
+            val key = getRoot(child)
+            pathMap += (key -> parent)
+            traverse(getChildren(child), getRoot(child))
+          })
+          //          currentPath += parent
+          //          path += currentPath
         }
       }
 
-      visit(tree, getChildren(tree), node)
+      traverse(getChildren(tree), getRoot(tree))
 
-      if (serialized.nonEmpty) Some(getRoot(tree))
+      val fullPathMap = Map[String, Queue[String]]()
+
+      pathMap.keys.foreach(key => {
+        val path = getPath(pathMap, key, Queue[String]())
+        fullPathMap += (key -> path)
+      })
+
+      //      val path = getPath(pathMap, node, Queue[String]())
+      println(fullPathMap)
+
+      if (fullPathMap.get(node.trim).nonEmpty) Some(getRoot(tree))
       else None
     }
 
