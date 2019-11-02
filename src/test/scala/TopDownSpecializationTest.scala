@@ -47,9 +47,9 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     val subset = input.select(QIDs.head, QIDs.tail: _*)
     val subsetWithK = subset.groupBy(QIDs.head, QIDs.tail: _*).count()
 
-//    val score = TopDownSpecialization.calculateScore(taxonomyTreeJson, subsetWithK, "class", List("<=50", ">50"))
+    val score = TopDownSpecialization.calculateScore(TopDownSpecialization.buildPathMapFromTree(taxonomyTreeJson.field("education").get), taxonomyTreeJson, subsetWithK, "class", List("<=50", ">50"))
 
-//    assert(score === 0.0151 +- 0.001)
+    assert(score === 0.0151 +- 0.001)
 
   }
 
