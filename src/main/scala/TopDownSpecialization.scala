@@ -165,14 +165,6 @@ object TopDownSpecialization extends Serializable {
 
     val children = anonymizationLevels.field(fieldToScore).get.field("leaves").get.arrayOrEmpty
 
-    // For every child - for now, we know we have two children!
-
-    val firstChild = children(0)
-    val secondChild = children(1)
-
-    val firstChildGeneralizedValue = firstChild.field("parent").get.stringOrEmpty
-    val secondChildGeneralizedValue = secondChild.field("parent").get.stringOrEmpty
-
     // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
 
     val subsetAnyEdu = subsetWithK.withColumn(generalizedField, lit(generalizedValue))
@@ -187,49 +179,40 @@ object TopDownSpecialization extends Serializable {
       (-division) * log2(division)
     }).sum
 
-    println(s"Entropy: $entropy")
-
     val childEntropyDf = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
 
-    val firstChildFirstSANumerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(0)}' and $generalizedField = '$firstChildGeneralizedValue'").agg(sum(countColumn)).first.getLong(0)
-    val firstChildSecondSANumerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(1)}' and $generalizedField = '$firstChildGeneralizedValue'").agg(sum(countColumn)).first.getLong(0)
+    val denominatorMap: Map[String, Long] = Map[String, Long]()
+    val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
 
-    val secondChildFirstSANumerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(0)}' and $generalizedField = '$secondChildGeneralizedValue'").agg(sum(countColumn)).first.getLong(0)
-    val secondChildSecondSANumerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttributes(1)}' and $generalizedField = '$secondChildGeneralizedValue'").agg(sum(countColumn)).first.getLong(0)
+    children.foreach(child => {
+      val denominator = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first.getLong(0)
+      childDenominatorList += denominator
+      denominatorMap += (getRoot(child) -> denominator)
+    })
 
-    val firstDenominator = childEntropyDf.where(s"$generalizedField = '$firstChildGeneralizedValue'").agg(sum(countColumn)).first.getLong(0)
-    val secondDenominator = childEntropyDf.where(s"$generalizedField = '$secondChildGeneralizedValue'").agg(sum(countColumn)).first.getLong(0)
+    val entropyMap: Map[String, Double] = Map[String, Double]()
 
-    val firstChildFirstSADivision = firstChildFirstSANumerator.toDouble / firstDenominator.toDouble
-    val firstChildSecondSADivision = firstChildSecondSANumerator.toDouble / firstDenominator.toDouble
+    children.foreach(child => {
+      sensitiveAttributes.foreach(sensitiveAttribute => {
+        val numerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first.getLong(0)
+        val division = numerator.toDouble / denominatorMap(getRoot(child))
+        val entropy = (-division) * log2(division)
+        if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+        else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+      })
+    })
 
-    val secondChildFirstSADivision = secondChildFirstSANumerator.toDouble / secondDenominator.toDouble
-    val secondChildSecondSADivision = secondChildSecondSANumerator.toDouble / secondDenominator.toDouble
+    val childrenEntropy = children.map(child => {
+      val node = getRoot(child)
+      val childDenominator = denominatorMap(node)
+      val childEntropy = entropyMap(node)
+      (childDenominator.toDouble / denominator.toDouble) * childEntropy
+    }).sum
 
-    val firstChildFirstSAEntropy = (-firstChildFirstSADivision) * log2(firstChildFirstSADivision)
-    val firstChildSecondSAEntropy = (-firstChildSecondSADivision) * log2(firstChildSecondSADivision)
-
-    val secondChildFirstSAEntropy = (-secondChildFirstSADivision) * log2(secondChildFirstSADivision)
-    val secondChildSecondSAEntropy = (-secondChildSecondSADivision) * log2(secondChildSecondSADivision)
-
-    val firstChildEntropy = firstChildFirstSAEntropy + firstChildSecondSAEntropy
-    val secondChildEntropy = secondChildFirstSAEntropy + secondChildSecondSAEntropy
-
-    println(s"First child first numerator is $firstChildFirstSANumerator")
-    println(s"First child second numerator is $firstChildSecondSANumerator")
-    println(s"First child denominator is $firstDenominator")
-
-    println(s"Second child first numerator is $secondChildFirstSANumerator")
-    println(s"Second child second numerator is $secondChildSecondSANumerator")
-    println(s"Second child denominator is $secondDenominator")
-
-    println(s"First child entropy is $firstChildEntropy")
-    println(s"Second child entropy is $secondChildEntropy")
-
-    val infoGain = entropy - (((firstDenominator.toDouble / denominator.toDouble) * firstChildEntropy) + ((secondDenominator.toDouble / denominator.toDouble) * secondChildEntropy))
+    val infoGain = entropy - childrenEntropy
 
     val anonymity = denominator
-    val anonymityPrime = min(firstDenominator, secondDenominator)
+    val anonymityPrime = childDenominatorList.min
 
     val score = infoGain.toDouble / (anonymity - anonymityPrime).toDouble
 
