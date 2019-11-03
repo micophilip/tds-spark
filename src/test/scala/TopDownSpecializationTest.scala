@@ -1,16 +1,26 @@
 import argonaut.Argonaut._
+import argonaut._
 import org.scalactic.Tolerance._
 import org.scalatest._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
-import scala.io.Source
+import scala.io.{BufferedSource, Source}
 
 class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
 
-  val resource = Source.fromResource("taxonomytree.json")
-  val taxonomyTree = try resource.mkString finally resource.close()
-  val taxonomyTreeJson = taxonomyTree.parseOption.get
+  val resource: BufferedSource = Source.fromResource("taxonomytree.json")
+  val taxonomyTree: String = try resource.mkString finally resource.close()
+  val taxonomyTreeJson: Json = taxonomyTree.parseOption.get
 
-  val spark = TopDownSpecialization.spark
+  val spark: SparkSession = TopDownSpecialization.spark
+
+  val testData: String = getClass.getResource("/test_data.csv").getPath
+
+  val input: DataFrame = spark.read
+    .option("header", "true")
+    .option("mode", "FAILFAST")
+    .option("inferSchema", "true")
+    .csv(testData)
 
   override def afterAll {
     spark.stop()
@@ -32,15 +42,7 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     assert(TopDownSpecialization.findAncestor(TopDownSpecialization.buildPathMapFromTree(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head), null, 0).isEmpty)
   }
 
-  test("calculateEntropy should accurately calculate entropy") {
-
-    val testData = getClass.getResource("/test_data.csv").getPath
-
-    val input = spark.read
-      .option("header", "true")
-      .option("mode", "FAILFAST")
-      .option("inferSchema", "true")
-      .csv(testData)
+  test("calculateScore should accurately calculate entropy") {
 
     val QIDs = List("education", "sex", "work_hrs", "class")
 
@@ -51,6 +53,11 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
 
     assert(score === 0.0151 +- 0.001)
 
+  }
+
+  test("calculateK should accurately calculate k") {
+    assert(TopDownSpecialization.calculateK(input, List("education", "sex", "work_hrs")) == 1)
+    assert(TopDownSpecialization.calculateK(input, List("sex", "work_hrs")) == 3)
   }
 
 }

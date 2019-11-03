@@ -9,6 +9,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.sum
 import org.apache.spark.sql.functions.when
 import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.min
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -131,6 +132,10 @@ object TopDownSpecialization extends Serializable {
         calculateScores(fullPathMap, tail, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
     }
 
+  }
+
+  def calculateK(dataset: DataFrame, columns: List[String]): Long = {
+    dataset.groupBy(columns.head, columns.tail: _*).count().agg(min("count")).head.getLong(0)
   }
 
   // Breadth-first search
