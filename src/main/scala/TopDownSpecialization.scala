@@ -70,8 +70,6 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
     val anonymizationLevels = taxonomyTreeString.parseOption.get
 
-    //    val pathMap = buildPathMapFromTree(anonymizationLevels.field("education").get)
-
     val fullPathMap: Map[String, Map[String, Queue[String]]] = Map[String, Map[String, Queue[String]]]()
 
     QIDsOnly.foreach(QID => {
