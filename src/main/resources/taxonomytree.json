@@ -113,7 +113,7 @@
       }
     ]
   },
-  "marital-status": {
+  "marital_status": {
     "parent": "Any",
     "leaves": [
       {
@@ -237,7 +237,7 @@
       }
     ]
   },
-  "native-country": {
+  "native_country": {
     "parent": "Any",
     "leaves": [
       {

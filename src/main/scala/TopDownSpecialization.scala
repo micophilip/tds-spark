@@ -11,6 +11,7 @@ import org.apache.spark.sql.functions.when
 import org.apache.spark.sql.functions.udf
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
@@ -33,7 +34,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
 
-    val QIDsOnly = List("education", "marital-status", "occupation", "native-country")
+    val QIDsOnly = List("education", "marital_status", "occupation", "native_country")
 
     val QIDsUnionSensitiveAttributes = QIDsOnly ::: List(sensitiveAttributeColumn)
 
@@ -77,9 +78,18 @@ object TopDownSpecialization extends Serializable {
     })
 
     // Step 2.1: Calculate scores for education_any taxonomy tree
-    calculateScore(fullPathMap("education"), anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, "education")
+    QIDsOnly.foreach(QID => {
+
+    })
+
+    val scores: Map[Double, String] = Map[Double, String]()
+
+    val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
 
     spark.stop()
+
+    val maxScore = updatedScores.keys.toList.max
+    println(s"QID with the highest score is ${updatedScores(maxScore)}")
   }
 
   def log2(value: Double): Double = {
@@ -103,6 +113,19 @@ object TopDownSpecialization extends Serializable {
 
   def isLeaf(tree: Json): Boolean = {
     getChildren(tree).isEmpty
+  }
+
+  @tailrec
+  def calculateScores(fullPathMap: Map[String, Map[String, Queue[String]]], QIDs: List[String], anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], scores: Map[Double, String]): Map[Double, String] = {
+
+    QIDs match {
+      case Nil => scores
+      case head :: tail =>
+        val score = calculateScore(fullPathMap(head), anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, head)
+        scores += (score -> head)
+        calculateScores(fullPathMap, tail, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
+    }
+
   }
 
   // Breadth-first search
@@ -224,7 +247,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Info gain is $infoGain")
     println(s"anonymity is $anonymity")
     println(s"anonymityPrime is $anonymityPrime")
-    println(s"Score is $score")
+    println(s"Score for $fieldToScore is $score")
 
     score
 
