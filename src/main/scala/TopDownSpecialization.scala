@@ -33,7 +33,9 @@ object TopDownSpecialization extends Serializable {
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
 
-    val QIDs = List("age", "education", "marital-status", "occupation", "native-country", sensitiveAttributeColumn)
+    val QIDsOnly = List("education", "marital-status", "occupation", "native-country")
+
+    val QIDsUnionSensitiveAttributes = QIDsOnly ::: List(sensitiveAttributeColumn)
 
     val input = spark.read
       .option("header", "true")
@@ -49,13 +51,13 @@ object TopDownSpecialization extends Serializable {
     val sensitiveAttributes: List[String] = input.select(sensitiveAttributeColumn).distinct().collect().map(_.getString(0)).toList
 
     // Step 1.1: All non quasi-identifier attributes are removed
-    val subset = input.select(QIDs.head, QIDs.tail: _*) //Pass each element of QID as its own argument to select
+    val subset = input.select(QIDsUnionSensitiveAttributes.head, QIDsUnionSensitiveAttributes.tail: _*) //Pass each element of QID as its own argument to select
 
     println("Dataset with QIDs selected")
     subset.show()
 
     // Step 1.2: Tuples with the same quasi-identifier values are grouped together
-    val subsetWithK = subset.groupBy(QIDs.head, QIDs.tail: _*).count()
+    val subsetWithK = subset.groupBy(QIDsUnionSensitiveAttributes.head, QIDsUnionSensitiveAttributes.tail: _*).count()
 
     println("Dataset grouped by QIDs")
     subsetWithK.show()
