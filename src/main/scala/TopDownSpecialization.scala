@@ -70,11 +70,16 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
     val anonymizationLevels = taxonomyTreeString.parseOption.get
 
-    val pathMap = buildPathMapFromTree(anonymizationLevels.field("education").get)
+    //    val pathMap = buildPathMapFromTree(anonymizationLevels.field("education").get)
 
+    val fullPathMap: Map[String, Map[String, Queue[String]]] = Map[String, Map[String, Queue[String]]]()
+
+    QIDsOnly.foreach(QID => {
+      fullPathMap += (QID -> buildPathMapFromTree(anonymizationLevels.field(QID).get))
+    })
 
     // Step 2.1: Calculate scores for education_any taxonomy tree
-    calculateScore(pathMap, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes)
+    calculateScore(fullPathMap("education"), anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, "education")
 
     spark.stop()
   }
@@ -114,6 +119,7 @@ object TopDownSpecialization extends Serializable {
         if (isLeaf(head)) {
           getParentChildMapping(tail, parentQueue, pathMap)
         } else {
+          //TODO: Look for a shortcut for this
           getChildren(head).foreach(child => {
             parentQueue += getRoot(head)
           })
@@ -157,10 +163,9 @@ object TopDownSpecialization extends Serializable {
     findAncestor(fullPathMap, value, level)
   })
 
-  def calculateScore(fullPathMap: Map[String, Queue[String]], anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String]): Double = {
+  def calculateScore(fullPathMap: Map[String, Queue[String]], anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], fieldToScore: String): Double = {
 
     val countColumn = "count"
-    val fieldToScore = "education"
 
     val generalizedField = s"${fieldToScore}_parent"
     val generalizedValue = anonymizationLevels.field(fieldToScore).get.field("parent").get.stringOrEmpty
