@@ -19,6 +19,8 @@ import scala.io.Source
 
 object TopDownSpecialization extends Serializable {
 
+  // TODO: Fix linting issues
+
   val spark = SparkSession.builder().appName("TopDownSpecialization")
     .config("spark.master", "local").getOrCreate()
 
@@ -77,19 +79,22 @@ object TopDownSpecialization extends Serializable {
       fullPathMap += (QID -> buildPathMapFromTree(anonymizationLevels.field(QID).get))
     })
 
-    // Step 2.1: Calculate scores for education_any taxonomy tree
-    QIDsOnly.foreach(QID => {
-
-    })
+    // Step 2.1: Calculate scores for each QID in taxonomy tree
+    /*
+     * For all attributes, generalize from leaf to root
+     * Calculate kCurrent
+     * If kCurrent > k, too generalized, find highest score for all anonymization levels (AL)
+     */
 
     val scores: Map[Double, String] = Map[Double, String]()
 
     val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
 
-    spark.stop()
-
     val maxScore = updatedScores.keys.toList.max
     println(s"QID with the highest score is ${updatedScores(maxScore)}")
+
+    spark.stop()
+
   }
 
   def log2(value: Double): Double = {
@@ -212,6 +217,7 @@ object TopDownSpecialization extends Serializable {
     val denominatorMap: Map[String, Long] = Map[String, Long]()
     val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
 
+    //TODO: Make recursive
     children.foreach(child => {
       val denominator = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first.getLong(0)
       childDenominatorList += denominator
@@ -220,6 +226,7 @@ object TopDownSpecialization extends Serializable {
 
     val entropyMap: Map[String, Double] = Map[String, Double]()
 
+    //TODO: Make recursive
     children.foreach(child => {
       sensitiveAttributes.foreach(sensitiveAttribute => {
         val numerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first.getLong(0)
