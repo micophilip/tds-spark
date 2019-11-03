@@ -68,11 +68,11 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
     val anonymizationLevels = taxonomyTreeString.parseOption.get
 
-    val pathMap = buildPathMapFromTree(anonymizationLevels)
+    val pathMap = buildPathMapFromTree(anonymizationLevels.field("education").get)
 
 
     // Step 2.1: Calculate scores for education_any taxonomy tree
-    //    calculateScore(anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes)
+    calculateScore(pathMap, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes)
 
     spark.stop()
   }
