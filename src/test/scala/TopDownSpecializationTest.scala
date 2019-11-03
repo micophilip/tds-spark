@@ -56,8 +56,13 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
   }
 
   test("calculateK should accurately calculate k") {
-    assert(TopDownSpecialization.calculateK(input, List("education", "sex", "work_hrs")) == 1)
-    assert(TopDownSpecialization.calculateK(input, List("sex", "work_hrs")) == 3)
+
+    val QIDs = List("sex", "work_hrs")
+
+    val subset = input.select(QIDs.head, QIDs.tail: _*)
+    val subsetWithK = subset.groupBy(QIDs.head, QIDs.tail: _*).count()
+
+    assert(TopDownSpecialization.calculateK(subsetWithK, QIDs) == 3)
   }
 
 }

@@ -87,6 +87,11 @@ object TopDownSpecialization extends Serializable {
      * If kCurrent > k, too generalized, find highest score for all anonymization levels (AL)
      */
 
+    val generalizedDF = generalizeToRoot(fullPathMap, subsetWithK, QIDsOnly)
+    val generalizedK = calculateK(generalizedDF, QIDsOnly.map(_ + "_generalized"))
+
+    println(s"Initial K is $generalizedK")
+
     val scores: Map[Double, String] = Map[Double, String]()
 
     val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
@@ -108,6 +113,17 @@ object TopDownSpecialization extends Serializable {
 
   def getChildren(tree: Json): JsonArray = {
     tree.field("leaves").get.arrayOrEmpty
+  }
+
+  @tailrec
+  def generalizeToRoot(fullPathMap: Map[String, Map[String, Queue[String]]], input: DataFrame, QIDs: List[String]): DataFrame = {
+
+    QIDs match {
+      case Nil => input
+      case head :: tail =>
+        val output = input.withColumn(head + "_generalized", findAncestorUdf(fullPathMap(head), 0)(input(head)))
+        generalizeToRoot(fullPathMap, output, tail)
+    }
   }
 
   @tailrec
@@ -135,7 +151,7 @@ object TopDownSpecialization extends Serializable {
   }
 
   def calculateK(dataset: DataFrame, columns: List[String]): Long = {
-    dataset.groupBy(columns.head, columns.tail: _*).count().agg(min("count")).head.getLong(0)
+    dataset.na.drop().groupBy(columns.head, columns.tail: _*).agg(sum("count").alias("sum")).agg(min("sum")).first.getLong(0)
   }
 
   // Breadth-first search
