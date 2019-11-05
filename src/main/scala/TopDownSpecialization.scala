@@ -31,13 +31,14 @@ object TopDownSpecialization extends Serializable {
 
     val inputPath = args(0)
     val taxonomyTreePath = args(1)
-    val k = args(2)
+    val k = args(2).toInt
     val sensitiveAttributeColumn = args(3)
 
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
 
     val QIDsOnly = List("education", "marital_status", "occupation", "native_country")
+    val QIDsGeneralized = QIDsOnly.map(_ + "_generalized")
 
     val QIDsUnionSensitiveAttributes = QIDsOnly ::: List(sensitiveAttributeColumn)
 
@@ -88,16 +89,19 @@ object TopDownSpecialization extends Serializable {
      */
 
     val generalizedDF = generalizeToRoot(fullPathMap, subsetWithK, QIDsOnly)
-    val generalizedK = calculateK(generalizedDF, QIDsOnly.map(_ + "_generalized"))
+    val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
-    println(s"Initial K is $generalizedK")
+    println(s"Initial K is $kCurrent")
 
-    val scores: Map[Double, String] = Map[Double, String]()
-
-    val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
-
-    val maxScore = updatedScores.keys.toList.max
-    println(s"QID with the highest score is ${updatedScores(maxScore)}")
+    if (kCurrent > k) {
+      val scores: Map[Double, String] = Map[Double, String]()
+      val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
+      val maxScore = updatedScores.keys.toList.max
+      val maxScoreColumn = updatedScores(maxScore)
+      println(s"QID with the highest score is $maxScoreColumn")
+    } else {
+      println(s"Dataset is $kCurrent-anonymous and required is $k")
+    }
 
     spark.stop()
 
@@ -221,7 +225,11 @@ object TopDownSpecialization extends Serializable {
 
     // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
 
+    subsetWithK.cache()
+
     val subsetAnyEdu = subsetWithK.withColumn(generalizedField, lit(generalizedValue))
+
+    subsetAnyEdu.cache()
 
     subsetAnyEdu.show()
 
@@ -276,6 +284,9 @@ object TopDownSpecialization extends Serializable {
     println(s"anonymity is $anonymity")
     println(s"anonymityPrime is $anonymityPrime")
     println(s"Score for $fieldToScore is $score")
+
+    subsetAnyEdu.unpersist()
+    subsetWithK.unpersist()
 
     score
 
