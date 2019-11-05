@@ -73,12 +73,16 @@ object TopDownSpecialization extends Serializable {
 
     val taxonomyTreeSource = Source.fromFile(taxonomyTreePath)
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
-    val anonymizationLevels = taxonomyTreeString.parseOption.get
+    val taxonomyTree = taxonomyTreeString.parseOption.get
+    val anonymizationLevels: JsonArray = QIDsOnly.map(QID => {
+      val anonymizationLevelTree = taxonomyTree.field(QID).get
+      Json("field" -> jString(QID), "tree" -> anonymizationLevelTree)
+    })
 
     val fullPathMap: Map[String, Map[String, Queue[String]]] = Map[String, Map[String, Queue[String]]]()
 
     QIDsOnly.foreach(QID => {
-      fullPathMap += (QID -> buildPathMapFromTree(anonymizationLevels.field(QID).get))
+      fullPathMap += (QID -> buildPathMapFromTree(taxonomyTree.field(QID).get))
     })
 
     // Step 2.1: Calculate scores for each QID in taxonomy tree
@@ -98,7 +102,7 @@ object TopDownSpecialization extends Serializable {
       val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
       val maxScore = updatedScores.keys.toList.max
       val maxScoreColumn = updatedScores(maxScore)
-      println(s"QID with the highest score is $maxScoreColumn")
+      println(s"QID with the highest score is $maxScoreColumn with a score of $maxScore")
     } else {
       println(s"Dataset is $kCurrent-anonymous and required is $k")
     }
@@ -142,14 +146,16 @@ object TopDownSpecialization extends Serializable {
   }
 
   @tailrec
-  def calculateScores(fullPathMap: Map[String, Map[String, Queue[String]]], QIDs: List[String], anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], scores: Map[Double, String]): Map[Double, String] = {
+  def calculateScores(fullPathMap: Map[String, Map[String, Queue[String]]], QIDs: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], scores: Map[Double, String]): Map[Double, String] = {
 
-    QIDs match {
+    anonymizationLevels match {
       case Nil => scores
       case head :: tail =>
-        val score = calculateScore(fullPathMap(head), anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, head)
-        scores += (score -> head)
-        calculateScores(fullPathMap, tail, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
+        val QID = head.field("field").get.stringOrEmpty
+        val tree = head.field("tree").get
+        val score = calculateScore(fullPathMap(QID), tree, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, QID)
+        scores += (score -> QID)
+        calculateScores(fullPathMap, QIDs, tail, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
     }
 
   }
@@ -214,14 +220,14 @@ object TopDownSpecialization extends Serializable {
     findAncestor(fullPathMap, value, level)
   })
 
-  def calculateScore(fullPathMap: Map[String, Queue[String]], anonymizationLevels: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], fieldToScore: String): Double = {
+  def calculateScore(fullPathMap: Map[String, Queue[String]], tree: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], fieldToScore: String): Double = {
 
     val countColumn = "count"
 
     val generalizedField = s"${fieldToScore}_parent"
-    val generalizedValue = anonymizationLevels.field(fieldToScore).get.field("parent").get.stringOrEmpty
+    val generalizedValue = tree.field("parent").get.stringOrEmpty
 
-    val children = anonymizationLevels.field(fieldToScore).get.field("leaves").get.arrayOrEmpty
+    val children = tree.field("leaves").get.arrayOrEmpty
 
     // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
 
