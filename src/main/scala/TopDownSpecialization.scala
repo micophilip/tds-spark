@@ -18,6 +18,8 @@ import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
 import scala.io.Source
 
+case class TopScoringAL(QID: String, parent: String)
+
 object TopDownSpecialization extends Serializable {
 
   // TODO: Fix linting issues
@@ -74,7 +76,7 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreeSource = Source.fromFile(taxonomyTreePath)
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
     val taxonomyTree = taxonomyTreeString.parseOption.get
-    val anonymizationLevels: JsonArray = QIDsOnly.map(QID => {
+    val anonymizationLevels = QIDsOnly.map(QID => {
       val anonymizationLevelTree = taxonomyTree.field(QID).get
       Json("field" -> jString(QID), "tree" -> anonymizationLevelTree)
     })
@@ -98,11 +100,14 @@ object TopDownSpecialization extends Serializable {
     println(s"Initial K is $kCurrent")
 
     if (kCurrent > k) {
-      val scores: Map[Double, String] = Map[Double, String]()
+      val scores: Map[Double, TopScoringAL] = Map[Double, TopScoringAL]()
       val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
       val maxScore = updatedScores.keys.toList.max
-      val maxScoreColumn = updatedScores(maxScore)
-      println(s"QID with the highest score is $maxScoreColumn with a score of $maxScore")
+      val maxScoreAL = updatedScores(maxScore)
+      val maxScoreColumn = maxScoreAL.QID
+      val maxScoreParent = maxScoreAL.parent
+      val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
+      println(s"QID with the highest score is $maxScoreColumn with a score of $maxScore and parent $maxScoreParent")
     } else {
       println(s"Dataset is $kCurrent-anonymous and required is $k")
     }
@@ -121,6 +126,19 @@ object TopDownSpecialization extends Serializable {
 
   def getChildren(tree: Json): JsonArray = {
     tree.field("leaves").get.arrayOrEmpty
+  }
+
+  def goToNextLevel(anonymizationLevels: JsonArray, maxScoreColumn: String, maxScoreParent: String): JsonArray = {
+    val maxScoreTree = anonymizationLevels.find(j => {
+      j.field("field").get.stringOrEmpty == maxScoreColumn && getRoot(j.field("tree").get) == maxScoreParent
+    })
+    val maxScoreChildren = getChildren(maxScoreTree.get.field("tree").get).map(c => {
+      Json("field" -> jString(maxScoreColumn), "tree" -> c)
+    })
+
+    anonymizationLevels.filter(j => {
+      j.field("field").get.stringOrEmpty != maxScoreColumn || getRoot(j.field("tree").get) != maxScoreParent
+    }) ::: maxScoreChildren
   }
 
   @tailrec
@@ -146,15 +164,16 @@ object TopDownSpecialization extends Serializable {
   }
 
   @tailrec
-  def calculateScores(fullPathMap: Map[String, Map[String, Queue[String]]], QIDs: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], scores: Map[Double, String]): Map[Double, String] = {
+  def calculateScores(fullPathMap: Map[String, Map[String, Queue[String]]], QIDs: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], scores: Map[Double, TopScoringAL]): Map[Double, TopScoringAL] = {
 
     anonymizationLevels match {
       case Nil => scores
       case head :: tail =>
         val QID = head.field("field").get.stringOrEmpty
         val tree = head.field("tree").get
+        val parent = tree.field("parent").get.stringOrEmpty
         val score = calculateScore(fullPathMap(QID), tree, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, QID)
-        scores += (score -> QID)
+        scores += (score -> TopScoringAL(QID, parent))
         calculateScores(fullPathMap, QIDs, tail, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
     }
 
