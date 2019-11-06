@@ -24,8 +24,10 @@ object TopDownSpecialization extends Serializable {
 
   // TODO: Fix linting issues
 
-  val spark = SparkSession.builder().appName("TopDownSpecialization")
+  val spark: SparkSession = SparkSession.builder().appName("TopDownSpecialization")
     .config("spark.master", "local").getOrCreate()
+
+  val GENERALIZED_POSTFIX = "_generalized"
 
   def main(args: Array[String]) = {
 
@@ -40,7 +42,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Running TDS with k = $k")
 
     val QIDsOnly = List("education", "marital_status", "occupation", "native_country")
-    val QIDsGeneralized = QIDsOnly.map(_ + "_generalized")
+    val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
 
     val QIDsUnionSensitiveAttributes = QIDsOnly ::: List(sensitiveAttributeColumn)
 
@@ -55,6 +57,7 @@ object TopDownSpecialization extends Serializable {
      */
 
     // Step 1.0: Store sensitive attributes
+    //TODO: Define globally along with sensitiveAttributeColumn
     val sensitiveAttributes: List[String] = input.select(sensitiveAttributeColumn).distinct().collect().map(_.getString(0)).toList
 
     // Step 1.1: All non quasi-identifier attributes are removed
@@ -97,16 +100,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Initial K is $kCurrent")
 
     if (kCurrent > k) {
-      val scores: Map[Double, TopScoringAL] = Map[Double, TopScoringAL]()
-      val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
-      val maxScore = updatedScores.keys.toList.max
-      val maxScoreAL = updatedScores(maxScore)
-      val maxScoreColumn = maxScoreAL.QID
-      val maxScoreParent = maxScoreAL.parent
-      val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
-      val sanitizedMap = sanitizePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
-      println(s"QID with the highest score is $maxScoreColumn with a score of $maxScore and parent $maxScoreParent")
-      println(s"Updated path map $sanitizedMap")
+      anonymize(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, k)
     } else {
       println(s"Dataset is $kCurrent-anonymous and required is $k")
     }
@@ -132,7 +126,7 @@ object TopDownSpecialization extends Serializable {
   def sanitizePathMap(pathMap: Map[String, Map[String, Queue[String]]], field: String, parent: String): Map[String, Map[String, Queue[String]]] = {
     pathMap(field).keys.foreach(key => {
       val queue = pathMap(field)(key)
-      if (queue(0) == parent) queue.dequeue()
+      if (queue.size > 0 && queue(0) == parent) queue.dequeue()
     })
     pathMap
   }
@@ -141,7 +135,7 @@ object TopDownSpecialization extends Serializable {
     val maxScoreTree = anonymizationLevels.find(j => {
       j.field("field").get.stringOrEmpty == maxScoreColumn && getRoot(j.field("tree").get) == maxScoreParent
     })
-    val maxScoreChildren = getChildren(maxScoreTree.get.field("tree").get).map(c => {
+    val maxScoreChildren = if (maxScoreTree.isEmpty || maxScoreTree.get.field("tree").isEmpty) List() else getChildren(maxScoreTree.get.field("tree").get).map(c => {
       Json("field" -> jString(maxScoreColumn), "tree" -> c)
     })
 
@@ -156,9 +150,38 @@ object TopDownSpecialization extends Serializable {
     QIDs match {
       case Nil => input
       case head :: tail =>
-        val output = input.withColumn(head + "_generalized", findAncestorUdf(fullPathMap(head), level)(input(head)))
+        val output = input.withColumn(head + GENERALIZED_POSTFIX, findAncestorUdf(fullPathMap(head), level)(input(head)))
         generalize(fullPathMap, output, tail, level)
     }
+  }
+
+  def anonymize(fullPathMap: Map[String, Map[String, Queue[String]]], QIDsOnly: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], requestedK: Int): DataFrame = {
+    val scores: Map[Double, TopScoringAL] = Map[Double, TopScoringAL]()
+    val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
+    subsetWithK.cache()
+
+    @tailrec
+    def anonymizeOneLevel(fullPathMap: Map[String, Map[String, Queue[String]]], anonymizationLevels: JsonArray, generalizedSoFar: DataFrame): DataFrame = {
+      val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
+      val maxScore = updatedScores.keys.toList.max
+      val maxScoreAL = updatedScores(maxScore)
+      val maxScoreColumn = maxScoreAL.QID
+      val maxScoreParent = maxScoreAL.parent
+      val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
+      val sanitizedMap = sanitizePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
+      val anonymous = generalize(fullPathMap, subsetWithK, List(maxScoreColumn), 0)
+      val kCurrent = calculateK(anonymous, QIDsGeneralized)
+      if (kCurrent > requestedK)
+        anonymizeOneLevel(sanitizedMap, newALs, anonymous)
+      else
+        anonymous
+    }
+
+    val anonymized = anonymizeOneLevel(fullPathMap, anonymizationLevels, subsetWithK)
+
+    subsetWithK.unpersist()
+
+    anonymized
   }
 
   @tailrec
@@ -238,7 +261,12 @@ object TopDownSpecialization extends Serializable {
 
     if (node == null) None
     else {
-      if (fullPathMap.get(node.trim).nonEmpty) Some(fullPathMap(node.trim)(level))
+      val trimmedNode = node.trim
+      val queue = fullPathMap.get(trimmedNode)
+      if ((queue.size > (level + 1)) && queue.nonEmpty)
+        Some(fullPathMap(trimmedNode)(0))
+      else if (queue.nonEmpty)
+        Some(fullPathMap(trimmedNode)(level))
       else None
     }
 
@@ -252,7 +280,7 @@ object TopDownSpecialization extends Serializable {
 
     val countColumn = "count" //TODO: Move to global scope
 
-    val generalizedField = s"${fieldToScore}_parent"
+    val generalizedField = s"$fieldToScore$GENERALIZED_POSTFIX"
     val generalizedValue = tree.field("parent").get.stringOrEmpty
 
     val children = tree.field("leaves").get.arrayOrEmpty
@@ -280,9 +308,12 @@ object TopDownSpecialization extends Serializable {
 
     //TODO: Make recursive
     children.foreach(child => {
-      val denominator = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first.getLong(0)
-      childDenominatorList += denominator
-      denominatorMap += (getRoot(child) -> denominator)
+      val first = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first()
+      if (first.get(0) != null) {
+        val denominator = first.getLong(0)
+        childDenominatorList += denominator
+        denominatorMap += (getRoot(child) -> denominator)
+      }
     })
 
     val entropyMap: Map[String, Double] = Map[String, Double]()
@@ -290,25 +321,32 @@ object TopDownSpecialization extends Serializable {
     //TODO: Make recursive
     children.foreach(child => {
       sensitiveAttributes.foreach(sensitiveAttribute => {
-        val numerator = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first.getLong(0)
-        val division = numerator.toDouble / denominatorMap(getRoot(child))
-        val entropy = (-division) * log2(division)
-        if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-        else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        val first = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first
+        if (denominatorMap.contains(getRoot(child)) && first.get(0) != null) {
+          val numerator = first.getLong(0)
+          val division = numerator.toDouble / denominatorMap(getRoot(child))
+          val entropy = (-division) * log2(division)
+          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        }
       })
     })
 
     val childrenEntropy = children.map(child => {
       val node = getRoot(child)
-      val childDenominator = denominatorMap(node)
-      val childEntropy = entropyMap(node)
-      (childDenominator.toDouble / denominator.toDouble) * childEntropy
+      if (denominatorMap.contains(node)) {
+        val childDenominator = denominatorMap(node)
+        val childEntropy = entropyMap(node)
+        (childDenominator.toDouble / denominator.toDouble) * childEntropy
+      } else {
+        0
+      }
     }).sum
 
     val infoGain = entropy - childrenEntropy
 
     val anonymity = denominator
-    val anonymityPrime = childDenominatorList.min
+    val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
 
     val score = infoGain.toDouble / (anonymity - anonymityPrime).toDouble
 
