@@ -89,6 +89,8 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
+    subsetWithK.cache()
+
     val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0)
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
@@ -102,10 +104,14 @@ object TopDownSpecialization extends Serializable {
       val maxScoreColumn = maxScoreAL.QID
       val maxScoreParent = maxScoreAL.parent
       val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
+      val sanitizedMap = sanitizePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
       println(s"QID with the highest score is $maxScoreColumn with a score of $maxScore and parent $maxScoreParent")
+      println(s"Updated path map $sanitizedMap")
     } else {
       println(s"Dataset is $kCurrent-anonymous and required is $k")
     }
+
+    subsetWithK.unpersist()
 
     spark.stop()
 
@@ -121,6 +127,14 @@ object TopDownSpecialization extends Serializable {
 
   def getChildren(tree: Json): JsonArray = {
     tree.field("leaves").get.arrayOrEmpty
+  }
+
+  def sanitizePathMap(pathMap: Map[String, Map[String, Queue[String]]], field: String, parent: String): Map[String, Map[String, Queue[String]]] = {
+    pathMap(field).keys.foreach(key => {
+      val queue = pathMap(field)(key)
+      if (queue(0) == parent) queue.dequeue()
+    })
+    pathMap
   }
 
   def goToNextLevel(anonymizationLevels: JsonArray, maxScoreColumn: String, maxScoreParent: String): JsonArray = {
@@ -236,7 +250,7 @@ object TopDownSpecialization extends Serializable {
 
   def calculateScore(fullPathMap: Map[String, Queue[String]], tree: Json, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], fieldToScore: String): Double = {
 
-    val countColumn = "count"
+    val countColumn = "count" //TODO: Move to global scope
 
     val generalizedField = s"${fieldToScore}_parent"
     val generalizedValue = tree.field("parent").get.stringOrEmpty
