@@ -60,14 +60,8 @@ object TopDownSpecialization extends Serializable {
     // Step 1.1: All non quasi-identifier attributes are removed
     val subset = input.select(QIDsUnionSensitiveAttributes.head, QIDsUnionSensitiveAttributes.tail: _*) //Pass each element of QID as its own argument to select
 
-    println("Dataset with QIDs selected")
-    subset.show()
-
     // Step 1.2: Tuples with the same quasi-identifier values are grouped together
     val subsetWithK = subset.groupBy(QIDsUnionSensitiveAttributes.head, QIDsUnionSensitiveAttributes.tail: _*).count()
-
-    println("Dataset grouped by QIDs")
-    subsetWithK.show()
 
     /*
      * Step 2: Generalization
@@ -92,9 +86,10 @@ object TopDownSpecialization extends Serializable {
      * For all attributes, generalize from leaf to root
      * Calculate kCurrent
      * If kCurrent > k, too generalized, find highest score for all anonymization levels (AL)
+     * Remove root of top scoring AL and add its children to ALs
      */
 
-    val generalizedDF = generalizeToRoot(fullPathMap, subsetWithK, QIDsOnly)
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0)
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
@@ -142,13 +137,13 @@ object TopDownSpecialization extends Serializable {
   }
 
   @tailrec
-  def generalizeToRoot(fullPathMap: Map[String, Map[String, Queue[String]]], input: DataFrame, QIDs: List[String]): DataFrame = {
+  def generalize(fullPathMap: Map[String, Map[String, Queue[String]]], input: DataFrame, QIDs: List[String], level: Int): DataFrame = {
 
     QIDs match {
       case Nil => input
       case head :: tail =>
-        val output = input.withColumn(head + "_generalized", findAncestorUdf(fullPathMap(head), 0)(input(head)))
-        generalizeToRoot(fullPathMap, output, tail)
+        val output = input.withColumn(head + "_generalized", findAncestorUdf(fullPathMap(head), level)(input(head)))
+        generalize(fullPathMap, output, tail, level)
     }
   }
 
@@ -255,8 +250,6 @@ object TopDownSpecialization extends Serializable {
     val subsetAnyEdu = subsetWithK.withColumn(generalizedField, lit(generalizedValue))
 
     subsetAnyEdu.cache()
-
-    subsetAnyEdu.show()
 
     val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
 
