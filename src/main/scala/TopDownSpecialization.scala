@@ -12,7 +12,7 @@ import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.functions.min
 
 import scala.annotation.tailrec
-import scala.collection.mutable
+import scala.collection.immutable
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Map
@@ -123,10 +123,10 @@ object TopDownSpecialization extends Serializable {
     tree.field("leaves").get.arrayOrEmpty
   }
 
-  def sanitizePathMap(pathMap: Map[String, Map[String, Queue[String]]], field: String, parent: String): Map[String, Map[String, Queue[String]]] = {
+  def updatePathMap(pathMap: Map[String, Map[String, Queue[String]]], field: String, parent: String): Map[String, Map[String, Queue[String]]] = {
     pathMap(field).keys.foreach(key => {
       val queue = pathMap(field)(key)
-      if (queue.size > 0 && queue(0) == parent) queue.dequeue()
+      if (queue.nonEmpty && queue.head == parent) queue.dequeue()
     })
     pathMap
   }
@@ -156,25 +156,27 @@ object TopDownSpecialization extends Serializable {
   }
 
   def anonymize(fullPathMap: Map[String, Map[String, Queue[String]]], QIDsOnly: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], requestedK: Int): DataFrame = {
-    val scores: Map[Double, TopScoringAL] = Map[Double, TopScoringAL]()
+
     val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
     subsetWithK.cache()
 
     @tailrec
     def anonymizeOneLevel(fullPathMap: Map[String, Map[String, Queue[String]]], anonymizationLevels: JsonArray, generalizedSoFar: DataFrame): DataFrame = {
-      val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, scores)
+      val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, generalizedSoFar, sensitiveAttributeColumn, sensitiveAttributes, Map[Double, TopScoringAL]())
       val maxScore = updatedScores.keys.toList.max
       val maxScoreAL = updatedScores(maxScore)
       val maxScoreColumn = maxScoreAL.QID
       val maxScoreParent = maxScoreAL.parent
-      val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
-      val sanitizedMap = sanitizePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
-      val anonymous = generalize(fullPathMap, subsetWithK, List(maxScoreColumn), 0)
+      val anonymous = generalize(fullPathMap, generalizedSoFar, List(maxScoreColumn), 0)
       val kCurrent = calculateK(anonymous, QIDsGeneralized)
-      if (kCurrent > requestedK)
-        anonymizeOneLevel(sanitizedMap, newALs, anonymous)
-      else
+      if (kCurrent > requestedK) {
+        val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
+        val updatedMap = updatePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
+        anonymizeOneLevel(updatedMap, newALs, anonymous)
+      } else {
+        //Check when k is violated
         anonymous
+      }
     }
 
     val anonymized = anonymizeOneLevel(fullPathMap, anonymizationLevels, subsetWithK)
@@ -262,12 +264,13 @@ object TopDownSpecialization extends Serializable {
     if (node == null) None
     else {
       val trimmedNode = node.trim
-      val queue = fullPathMap.get(trimmedNode)
-      if ((queue.size > (level + 1)) && queue.nonEmpty)
-        Some(fullPathMap(trimmedNode)(0))
-      else if (queue.nonEmpty)
-        Some(fullPathMap(trimmedNode)(level))
-      else None
+      val queue = fullPathMap(trimmedNode)
+      if (queue.isEmpty)
+        None
+      else if (queue.size <= level)
+        Some(queue.head)
+      else
+        Some(queue(level))
     }
 
   }
@@ -293,6 +296,7 @@ object TopDownSpecialization extends Serializable {
 
     subsetAnyEdu.cache()
 
+    //TODO: Validate calculation for subtrees
     val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
 
     val entropy = sensitiveAttributes.map(sensitiveAttribute => {
@@ -310,9 +314,9 @@ object TopDownSpecialization extends Serializable {
     children.foreach(child => {
       val first = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first()
       if (first.get(0) != null) {
-        val denominator = first.getLong(0)
-        childDenominatorList += denominator
-        denominatorMap += (getRoot(child) -> denominator)
+        val childDenominator = first.getLong(0)
+        childDenominatorList += childDenominator
+        denominatorMap += (getRoot(child) -> childDenominator)
       }
     })
 
@@ -335,9 +339,9 @@ object TopDownSpecialization extends Serializable {
     val childrenEntropy = children.map(child => {
       val node = getRoot(child)
       if (denominatorMap.contains(node)) {
-        val childDenominator = denominatorMap(node)
+        val childDenominatorFromMap = denominatorMap(node)
         val childEntropy = entropyMap(node)
-        (childDenominator.toDouble / denominator.toDouble) * childEntropy
+        (childDenominatorFromMap.toDouble / denominator.toDouble) * childEntropy
       } else {
         0
       }
@@ -353,7 +357,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Info gain is $infoGain")
     println(s"anonymity is $anonymity")
     println(s"anonymityPrime is $anonymityPrime")
-    println(s"Score for $fieldToScore is $score")
+    println(s"Score for ${fieldToScore}_$generalizedValue is $score")
 
     subsetAnyEdu.unpersist()
     subsetWithK.unpersist()
