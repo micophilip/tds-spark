@@ -288,81 +288,89 @@ object TopDownSpecialization extends Serializable {
 
     val children = tree.field("leaves").get.arrayOrEmpty
 
-    // Rerun calculation for every child, withColumn call should be with generalized value (root of tree that the leaf belongs to)
-
-    subsetWithK.cache()
-
     val subsetAnyEdu = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
 
-    subsetAnyEdu.cache()
 
     //TODO: Validate calculation for subtrees
-    val denominator = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
+    val denominatorDf = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first
 
-    val entropy = sensitiveAttributes.map(sensitiveAttribute => {
-      val numerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first.getLong(0)
-      val division = numerator.toDouble / denominator.toDouble
-      (-division) * log2(division)
-    }).sum
+    if (denominatorDf.get(0) == null) {
+      0
+    } else {
+      subsetWithK.cache()
+      subsetAnyEdu.cache()
+      val denominator = denominatorDf.getLong(0)
+      val entropy = sensitiveAttributes.map(sensitiveAttribute => {
+        val numerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first
+        if (numerator.get(0) != null) {
+          val division = numerator.getLong(0).toDouble / denominator.toDouble
+          (-division) * log2(division)
+        } else {
+          0
+        }
+      }).sum
 
-    val childEntropyDf = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
+      val childEntropyDf = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
 
-    val denominatorMap: Map[String, Long] = Map[String, Long]()
-    val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
+      val denominatorMap: Map[String, Long] = Map[String, Long]()
+      val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
 
-    //TODO: Make recursive
-    children.foreach(child => {
-      val first = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first()
-      if (first.get(0) != null) {
-        val childDenominator = first.getLong(0)
-        childDenominatorList += childDenominator
-        denominatorMap += (getRoot(child) -> childDenominator)
-      }
-    })
-
-    val entropyMap: Map[String, Double] = Map[String, Double]()
-
-    //TODO: Make recursive
-    children.foreach(child => {
-      sensitiveAttributes.foreach(sensitiveAttribute => {
-        val first = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first
-        if (denominatorMap.contains(getRoot(child)) && first.get(0) != null) {
-          val numerator = first.getLong(0)
-          val division = numerator.toDouble / denominatorMap(getRoot(child))
-          val entropy = (-division) * log2(division)
-          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+      //TODO: Make recursive
+      children.foreach(child => {
+        val first = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first()
+        if (first.get(0) != null) {
+          val childDenominator = first.getLong(0)
+          childDenominatorList += childDenominator
+          denominatorMap += (getRoot(child) -> childDenominator)
         }
       })
-    })
 
-    val childrenEntropy = children.map(child => {
-      val node = getRoot(child)
-      if (denominatorMap.contains(node)) {
-        val childDenominatorFromMap = denominatorMap(node)
-        val childEntropy = entropyMap(node)
-        (childDenominatorFromMap.toDouble / denominator.toDouble) * childEntropy
-      } else {
-        0
-      }
-    }).sum
+      val entropyMap: Map[String, Double] = Map[String, Double]()
 
-    val infoGain = entropy - childrenEntropy
+      //TODO: Make recursive
+      children.foreach(child => {
+        sensitiveAttributes.foreach(sensitiveAttribute => {
+          val first = childEntropyDf.where(s"$sensitiveAttributeColumn = '${sensitiveAttribute}' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first
+          if (denominatorMap.contains(getRoot(child)) && first.get(0) != null) {
+            val numerator = first.getLong(0)
+            val division = numerator.toDouble / denominatorMap(getRoot(child))
+            val entropy = (-division) * log2(division)
+            if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+            else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+          }
+        })
+      })
 
-    val anonymity = denominator
-    val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
+      val childrenEntropy = children.map(child => {
+        val node = getRoot(child)
+        if (denominatorMap.contains(node)) {
+          val childDenominatorFromMap = denominatorMap(node)
+          val childEntropy = entropyMap(node)
+          (childDenominatorFromMap.toDouble / denominator.toDouble) * childEntropy
+        } else {
+          0
+        }
+      }).sum
 
-    val score = infoGain.toDouble / (anonymity - anonymityPrime).toDouble
+      val infoGain = entropy - childrenEntropy
 
-    println(s"Info gain is $infoGain")
-    println(s"anonymity is $anonymity")
-    println(s"anonymityPrime is $anonymityPrime")
-    println(s"Score for ${fieldToScore}_$generalizedValue is $score")
+      val anonymity = denominator
+      val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
+      val anonymityLoss = (anonymity - anonymityPrime).toDouble
 
-    subsetAnyEdu.unpersist()
-    subsetWithK.unpersist()
+      val score = if (anonymityLoss == 0.0) infoGain else (infoGain.toDouble / (anonymity - anonymityPrime).toDouble)
 
-    score
+      println(s"Info gain is $infoGain")
+      println(s"anonymity is $anonymity")
+      println(s"anonymityPrime is $anonymityPrime")
+      println(s"Score for ${fieldToScore}_$generalizedValue is $score")
+
+      subsetAnyEdu.unpersist()
+      subsetWithK.unpersist()
+
+      score
+
+    }
 
   }
 
