@@ -264,13 +264,12 @@ object TopDownSpecialization extends Serializable {
     if (node == null) None
     else {
       val trimmedNode = node.trim
-      val queue = fullPathMap(trimmedNode)
-      if (queue.isEmpty)
+      if (!fullPathMap.contains(trimmedNode) || fullPathMap(trimmedNode).isEmpty)
         None
-      else if (queue.size <= level)
-        Some(queue.head)
+      else if (fullPathMap(trimmedNode).size <= level)
+        Some(fullPathMap(trimmedNode).head)
       else
-        Some(queue(level))
+        Some(fullPathMap(trimmedNode)(level))
     }
 
   }
