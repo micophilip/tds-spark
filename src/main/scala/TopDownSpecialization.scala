@@ -292,7 +292,7 @@ object TopDownSpecialization extends Serializable {
 
     subsetWithK.cache()
 
-    val subsetAnyEdu = subsetWithK.withColumn(generalizedField, lit(generalizedValue))
+    val subsetAnyEdu = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
 
     subsetAnyEdu.cache()
 
