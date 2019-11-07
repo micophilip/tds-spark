@@ -174,7 +174,7 @@ object TopDownSpecialization extends Serializable {
         val updatedMap = updatePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
         anonymizeOneLevel(updatedMap, newALs, anonymous)
       } else {
-        //Check when k is violated
+        // TODO handle case when k is violated
         anonymous
       }
     }
@@ -290,8 +290,6 @@ object TopDownSpecialization extends Serializable {
 
     val subsetAnyEdu = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
 
-
-    //TODO: Validate calculation for subtrees
     val denominatorDf = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first
 
     if (denominatorDf.get(0) == null) {
