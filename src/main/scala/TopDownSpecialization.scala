@@ -126,7 +126,7 @@ object TopDownSpecialization extends Serializable {
   def updatePathMap(pathMap: Map[String, Map[String, Queue[String]]], field: String, parent: String): Map[String, Map[String, Queue[String]]] = {
     pathMap(field).keys.foreach(key => {
       val queue = pathMap(field)(key)
-      if (queue.nonEmpty && queue.head == parent) queue.dequeue()
+      if (queue.nonEmpty && queue.head == parent && queue.size > 1) queue.dequeue()
     })
     pathMap
   }
