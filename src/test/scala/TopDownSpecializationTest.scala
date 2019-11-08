@@ -78,8 +78,8 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     val educationTree = taxonomyTreeJson.field(field).get
     val fullPathMap = Map[String, Map[String, Queue[String]]](field -> TopDownSpecialization.buildPathMapFromTree(educationTree))
     val anonymizationLevels: JsonArray = Json.array(Json("field" -> jString(field), "tree" -> educationTree)).arrayOrEmpty
-    val generalized = TopDownSpecialization.generalize(fullPathMap, subsetWithK, QIDs, 0)
-    val anonymized = TopDownSpecialization.anonymize(fullPathMap, QIDs, anonymizationLevels, generalized, "class", List("<=50", ">50"), 5)
+    val anonymizedMap = TopDownSpecialization.anonymize(fullPathMap, QIDs, anonymizationLevels, subsetWithK, "class", List("<=50", ">50"), 5)
+    val anonymized = TopDownSpecialization.generalize(anonymizedMap, subsetWithK, QIDs, 0)
     val kAnonymized = TopDownSpecialization.calculateK(anonymized, QIDsGeneralized)
     anonymized.show()
     assert(kAnonymized == 8)
