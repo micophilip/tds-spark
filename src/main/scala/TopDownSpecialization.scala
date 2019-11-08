@@ -100,9 +100,12 @@ object TopDownSpecialization extends Serializable {
     println(s"Initial K is $kCurrent")
 
     if (kCurrent > k) {
-      val anonymizedLevels = anonymize(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, sensitiveAttributeColumn, sensitiveAttributes, k)
+      val anonymizedLevels = anonymize(fullPathMap, QIDsOnly, anonymizationLevels, generalizedDF, sensitiveAttributeColumn, sensitiveAttributes, k)
+      val anonymizedDataset = generalize(anonymizedLevels, subsetWithK, QIDsOnly, 0)
+      val kFinal = calculateK(anonymizedDataset, QIDsGeneralized)
+      println(s"Successfully anonymized dataset to k=$kFinal")
     } else {
-      println(s"Dataset is $kCurrent-anonymous and required is $k")
+      println(s"Dataset is $kCurrent-anonymous and required is $k. No further anonymization necessary")
     }
 
     subsetWithK.unpersist()
