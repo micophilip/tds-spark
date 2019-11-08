@@ -81,7 +81,6 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     val anonymizedMap = TopDownSpecialization.anonymize(fullPathMap, QIDs, anonymizationLevels, subsetWithK, "class", List("<=50", ">50"), 5)
     val anonymized = TopDownSpecialization.generalize(anonymizedMap, subsetWithK, QIDs, 0)
     val kAnonymized = TopDownSpecialization.calculateK(anonymized, QIDsGeneralized)
-    anonymized.show()
     assert(kAnonymized == 8)
   }
 
