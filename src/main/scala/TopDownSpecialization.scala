@@ -115,6 +115,14 @@ object TopDownSpecialization extends Serializable {
     log(value) / log(2.0)
   }
 
+  def deepCopy(source: Map[String, Map[String, Queue[String]]]): Map[String, Map[String, Queue[String]]] = {
+    source.map(t => {
+      t._1 -> t._2.map(l => {
+        l._1 -> l._2.clone
+      })
+    })
+  }
+
   def getRoot(tree: Json): String = {
     tree.field("parent").get.stringOrEmpty
   }
@@ -157,11 +165,12 @@ object TopDownSpecialization extends Serializable {
 
   def anonymize(fullPathMap: Map[String, Map[String, Queue[String]]], QIDsOnly: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, sensitiveAttributeColumn: String, sensitiveAttributes: List[String], requestedK: Int): DataFrame = {
 
+    val originalMap = Map[String, Map[String, Queue[String]]]()
     val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
     subsetWithK.cache()
 
     @tailrec
-    def anonymizeOneLevel(fullPathMap: Map[String, Map[String, Queue[String]]], anonymizationLevels: JsonArray, generalizedSoFar: DataFrame): DataFrame = {
+    def anonymizeOneLevel(originalPathMap: Map[String, Map[String, Queue[String]]], fullPathMap: Map[String, Map[String, Queue[String]]], anonymizationLevels: JsonArray, generalizedSoFar: DataFrame): DataFrame = {
       val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, generalizedSoFar, sensitiveAttributeColumn, sensitiveAttributes, Map[Double, TopScoringAL]())
       val maxScore = updatedScores.keys.toList.max
       val maxScoreAL = updatedScores(maxScore)
@@ -171,15 +180,17 @@ object TopDownSpecialization extends Serializable {
       val kCurrent = calculateK(anonymous, QIDsGeneralized)
       if (kCurrent > requestedK) {
         val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
+        val previousMap = deepCopy(fullPathMap)
         val updatedMap = updatePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
-        anonymizeOneLevel(updatedMap, newALs, anonymous)
+        anonymizeOneLevel(previousMap, updatedMap, newALs, anonymous)
+      } else if (kCurrent < requestedK) {
+        generalize(originalPathMap, generalizedSoFar, List(maxScoreColumn), 0)
       } else {
-        // TODO handle case when k is violated
         anonymous
       }
     }
 
-    val anonymized = anonymizeOneLevel(fullPathMap, anonymizationLevels, subsetWithK)
+    val anonymized = anonymizeOneLevel(originalMap, fullPathMap, anonymizationLevels, subsetWithK)
 
     subsetWithK.unpersist()
 
