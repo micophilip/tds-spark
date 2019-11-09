@@ -93,9 +93,7 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
-    subsetWithK.cache()
-
-    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0)
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(8).cache()
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
@@ -111,9 +109,9 @@ object TopDownSpecialization extends Serializable {
 
     val finish = System.currentTimeMillis()
 
-    subsetWithK.unpersist()
-
     println(s"Anonymized dataset in ${finish - start} ms")
+
+    generalizedDF.unpersist()
 
     spark.stop()
 
