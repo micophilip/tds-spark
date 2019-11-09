@@ -1,11 +1,10 @@
-import TopDownSpecialization.buildPathMapFromTree
 import argonaut.Argonaut._
 import argonaut._
 import org.scalactic.Tolerance._
 import org.scalatest._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
-import scala.collection.mutable.{Map, Queue}
+import scala.collection.mutable
 import scala.io.{BufferedSource, Source}
 
 class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
@@ -46,13 +45,13 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
 
   test("calculateScore should accurately calculate entropy") {
 
-    val QIDs = List("education", "sex", "work_hrs", "class")
+    val QIDs = List("education", "sex", "work_hrs", "income")
 
     val subset = input.select(QIDs.head, QIDs.tail: _*)
     val subsetWithK = subset.groupBy(QIDs.head, QIDs.tail: _*).count()
     val educationTree = taxonomyTreeJson.field("education").get
 
-    val score = TopDownSpecialization.calculateScore(TopDownSpecialization.buildPathMapFromTree(educationTree), educationTree, subsetWithK, "class", List("<=50", ">50"), "education")
+    val score = TopDownSpecialization.calculateScore(TopDownSpecialization.buildPathMapFromTree(educationTree), educationTree, subsetWithK, "education")
 
     assert(score === 0.0151 +- 0.001)
 
@@ -72,13 +71,13 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     val field = "education"
     val QIDs = List(field)
     val QIDsGeneralized = QIDs.map(_ + TopDownSpecialization.GENERALIZED_POSTFIX)
-    val QIDsUnionSA = QIDs ::: List("class")
+    val QIDsUnionSA = QIDs ::: List("income")
     val subset = input.select(QIDsUnionSA.head, QIDsUnionSA.tail: _*)
     val subsetWithK = subset.groupBy(QIDsUnionSA.head, QIDsUnionSA.tail: _*).count()
     val educationTree = taxonomyTreeJson.field(field).get
-    val fullPathMap = Map[String, Map[String, Queue[String]]](field -> TopDownSpecialization.buildPathMapFromTree(educationTree))
+    val fullPathMap = mutable.Map[String, mutable.Map[String, mutable.Queue[String]]](field -> TopDownSpecialization.buildPathMapFromTree(educationTree))
     val anonymizationLevels: JsonArray = Json.array(Json("field" -> jString(field), "tree" -> educationTree)).arrayOrEmpty
-    val anonymizedMap = TopDownSpecialization.anonymize(fullPathMap, QIDs, anonymizationLevels, subsetWithK, "class", List("<=50", ">50"), 5)
+    val anonymizedMap = TopDownSpecialization.anonymize(fullPathMap, QIDs, anonymizationLevels, subsetWithK, 5)
     val anonymized = TopDownSpecialization.generalize(anonymizedMap, subsetWithK, QIDs, 0)
     val kAnonymized = TopDownSpecialization.calculateK(anonymized, QIDsGeneralized)
     assert(kAnonymized == 8)
