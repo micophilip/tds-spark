@@ -19,7 +19,7 @@ object TopDownSpecialization extends Serializable {
 
   val GENERALIZED_POSTFIX = "_generalized"
 
-  val sensitiveAttributes: List[String] = List("<=50", ">50")
+  val sensitiveAttributes: List[String] = List("<=50K", ">50K")
   val sensitiveAttributeColumn = "income"
 
   val countColumn = "count"
