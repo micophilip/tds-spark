@@ -25,7 +25,7 @@ object TopDownSpecialization extends Serializable {
   // TODO: Fix linting issues
 
   val spark: SparkSession = SparkSession.builder().appName("TopDownSpecialization")
-    .config("spark.master", "local").getOrCreate()
+    .config("spark.master", "local[8]").getOrCreate()
 
   val GENERALIZED_POSTFIX = "_generalized"
 
@@ -37,6 +37,7 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreePath = args(1)
     val k = args(2).toInt
     val sensitiveAttributeColumn = args(3)
+    val start = System.currentTimeMillis()
 
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
@@ -108,7 +109,11 @@ object TopDownSpecialization extends Serializable {
       println(s"Dataset is $kCurrent-anonymous and required is $k. No further anonymization necessary")
     }
 
+    val finish = System.currentTimeMillis()
+
     subsetWithK.unpersist()
+
+    println(s"Anonymized dataset in ${finish - start} ms")
 
     spark.stop()
 
