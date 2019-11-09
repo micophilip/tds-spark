@@ -14,7 +14,7 @@ Run `sbt package` task
 
 ## Spark submit
 
-`spark-submit --class TopDownSpecialization --master local target/scala-2.12/code_2.12-0.1.jar <pathToInputDataset> <pathToTaxonomyTree> <k> <sensitiveAttributeColumn>`
+`spark-submit --class TopDownSpecialization --master local target/scala-2.12/code_2.12-0.1.jar <pathToInputDataset> <pathToTaxonomyTree> <k>`
 
 ## Performance
 
