@@ -10,9 +10,9 @@ import scala.collection.mutable.ListBuffer
 import scala.io.Source
 import scala.math._
 
-case class TopScoringAL(QID: String, parent: String)
-
 object TopDownSpecialization extends Serializable {
+
+  case class TopScoringAL(QID: String, parent: String)
 
   val spark: SparkSession = SparkSession.builder().appName("TopDownSpecialization")
     .config("spark.master", "local[8]").getOrCreate()
