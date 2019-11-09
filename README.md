@@ -16,6 +16,14 @@ Run `sbt package` task
 
 `spark-submit --class TopDownSpecialization --master local target/scala-2.12/code_2.12-0.1.jar <pathToInputDataset> <pathToTaxonomyTree> <k> <sensitiveAttributeColumn>`
 
+## Performance
+
+|Records|k|Nodes|Partitions|Time (in ms)|
+|---|---|---|---|---|
+|32562|100|8|1|119371|
+|32562|100|1|1|391149|
+
+
 # Useful documentation
 
 [Submitting Applications](https://spark.apache.org/docs/latest/submitting-applications.html)  
