@@ -15,7 +15,7 @@ object TopDownSpecialization extends Serializable {
   case class TopScoringAL(QID: String, parent: String)
 
   val spark: SparkSession = SparkSession.builder().appName("TopDownSpecialization")
-    .config("spark.master", "local[8]").getOrCreate()
+    .config("spark.master", "local[*]").getOrCreate()
 
   val GENERALIZED_POSTFIX = "_generalized"
 
@@ -81,7 +81,7 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
-    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(8).cache()
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).cache()
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
