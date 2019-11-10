@@ -495,5 +495,139 @@
         ]
       }
     ]
+  },
+  "workclass": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "Worked",
+        "leaves": [
+          {
+            "parent": "With-Pay",
+            "leaves": [
+              {
+                "parent": "Private",
+                "leaves": []
+              },
+              {
+                "parent": "Self-emp",
+                "leaves": [
+                  {
+                    "parent": "Self-emp-not-inc",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "Self-emp-inc",
+                    "leaves": []
+                  }
+                ]
+              },
+              {
+                "parent": "Gov",
+                "leaves": [
+                  {
+                    "parent": "Federal-gov",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "Local-gov",
+                    "leaves": []
+                  },
+                  {
+                    "parent": "State-gov",
+                    "leaves": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "parent": "Without-pay",
+            "leaves": []
+          }
+        ]
+      },
+      {
+        "parent": "Never-worked",
+        "leaves": []
+      }
+    ]
+  },
+  "relationship": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "In-family",
+        "leaves": [
+          {
+            "parent": "Wife",
+            "leaves": []
+          },
+          {
+            "parent": "Own-child",
+            "leaves": []
+          },
+          {
+            "parent": "Husband",
+            "leaves": []
+          }
+        ]
+      },
+      {
+        "parent": "Not-in-family",
+        "leaves": []
+      },
+      {
+        "parent": "Other-relative",
+        "leaves": []
+      },
+      {
+        "parent": "Unmarried",
+        "leaves": []
+      }
+    ]
+  },
+  "race": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "White",
+        "leaves": []
+      },
+      {
+        "parent": "Colored",
+        "leaves": [
+          {
+            "parent": "Asian-Pac-Islander",
+            "leaves": []
+          },
+          {
+            "parent": "Amer-Indian-Eskimo",
+            "leaves": []
+          },
+          {
+            "parent": "Other",
+            "leaves": []
+          },
+          {
+            "parent": "Black",
+            "leaves": []
+          }
+        ]
+      }
+    ]
+  },
+  "sex": {
+    "parent": "Any",
+    "leaves": [
+      {
+        "parent": "Female",
+        "leaves": []
+      },
+      {
+        "parent": "Male",
+        "leaves": []
+      }
+    ]
   }
 }

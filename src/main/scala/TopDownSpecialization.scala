@@ -34,7 +34,7 @@ object TopDownSpecialization extends Serializable {
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
 
-    val QIDsOnly = List("education", "marital_status", "occupation", "native_country")
+    val QIDsOnly = List("education", "marital_status", "occupation", "native_country", "workclass", "relationship", "race", "sex")
     val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
 
     val QIDsUnionSensitiveAttributes = QIDsOnly ::: List(sensitiveAttributeColumn)
