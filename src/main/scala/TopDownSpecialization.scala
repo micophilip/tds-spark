@@ -170,12 +170,12 @@ object TopDownSpecialization extends Serializable {
       val maxScoreAL = updatedScores(maxScore)
       val maxScoreColumn = maxScoreAL.QID
       val maxScoreParent = maxScoreAL.parent
-      val anonymous = generalize(fullPathMap, subsetWithK, List(maxScoreColumn), 0)
+      val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
+      val previousMap = deepCopy(fullPathMap)
+      val updatedMap = updatePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
+      val anonymous = generalize(updatedMap, subsetWithK, List(maxScoreColumn), 0)
       val kCurrent = calculateK(anonymous, QIDsGeneralized)
       if (kCurrent > requestedK) {
-        val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
-        val previousMap = deepCopy(fullPathMap)
-        val updatedMap = updatePathMap(fullPathMap, maxScoreColumn, maxScoreParent)
         anonymizeOneLevel(previousMap, updatedMap, newALs)
       } else if (kCurrent < requestedK) {
         originalPathMap
