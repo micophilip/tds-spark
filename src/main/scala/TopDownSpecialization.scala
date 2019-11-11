@@ -1,7 +1,7 @@
 import argonaut.Argonaut._
 import argonaut._
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{min, sum, udf}
+import org.apache.spark.sql.functions.{min, sum, udf, when, lit}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.annotation.tailrec
@@ -280,6 +280,125 @@ object TopDownSpecialization extends Serializable {
   def findAncestorUdf(fullPathMap: mutable.Map[String, mutable.Queue[String]], level: Int): UserDefinedFunction = udf((value: String) => {
     findAncestor(fullPathMap, value, level)
   })
+
+  @tailrec
+  def getRVSV(generalizedField: String, generalizedValue: String, dataFrame: DataFrame, rest: List[String]): DataFrame = {
+    rest match {
+      case Nil => dataFrame
+      case head :: tail =>
+        getRVSV(generalizedField, generalizedValue, dataFrame.withColumn(generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(head), when(dataFrame(generalizedField) === generalizedValue and dataFrame(sensitiveAttributeColumn) === head, dataFrame(countColumn)).otherwise(0)), tail)
+    }
+  }
+
+  @tailrec
+  def getRVC(generalizedField: String, dataFrame: DataFrame, children: JsonArray): DataFrame = {
+    children match {
+      case Nil => dataFrame
+      case head :: tail =>
+        getRVC(generalizedField, dataFrame.withColumn(generalizedField + "_RVC_" + getRoot(head), when(dataFrame(generalizedField) === getRoot(head), dataFrame(countColumn)).otherwise(0)), tail)
+    }
+  }
+
+  @tailrec
+  def getRVCSV_SA(generalizedField: String, dataFrame: DataFrame, children: JsonArray, sensitiveAttribute: String): DataFrame = {
+
+    children match {
+      case Nil => dataFrame
+      case head :: tail =>
+        getRVCSV_SA(generalizedField, dataFrame.withColumn(generalizedField + "_RVCSV_" + getRoot(head) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute), when((dataFrame(generalizedField) === getRoot(head)) and (dataFrame(sensitiveAttributeColumn) === sensitiveAttribute), dataFrame(countColumn)).otherwise(0)), tail, sensitiveAttribute)
+    }
+
+  }
+
+  @tailrec
+  def getRVCSV(generalizedField: String, dataFrame: DataFrame, children: JsonArray, rest: List[String]): DataFrame = {
+
+    rest match {
+      case Nil => dataFrame
+      case head :: tail =>
+        getRVCSV(generalizedField, getRVCSV_SA(generalizedField, dataFrame, children, head), children, tail)
+    }
+
+  }
+
+  def calculateScoreOptimized(fullPathMap: mutable.Map[String, mutable.Queue[String]], tree: Json, subsetWithK: DataFrame, fieldToScore: String): Double = {
+    val generalizedField = s"$fieldToScore$GENERALIZED_POSTFIX"
+    val generalizedValue = tree.field("parent").get.stringOrEmpty
+
+    val children = tree.field("leaves").get.arrayOrEmpty
+    val denominatorMap: mutable.Map[String, Long] = mutable.Map[String, Long]()
+    val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
+    val entropyMap: mutable.Map[String, Double] = mutable.Map[String, Double]()
+    
+    val subset = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
+    val subsetChildren = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
+
+    subset.cache()
+    subsetChildren.cache()
+
+    val RV = subset.withColumn(generalizedField + "_RV", when(subset(generalizedField) === generalizedValue, subset(countColumn)).otherwise(0))
+
+    val RVSV = getRVSV(generalizedField, generalizedValue, subset, sensitiveAttributes)
+
+    val RVC = getRVC(generalizedField, subsetChildren, children)
+
+    val RVCSV = getRVCSV(generalizedField, subsetChildren, children, sensitiveAttributes)
+
+    val RV_TOTAL = RV.agg(sum(generalizedField + "_RV")).first().getLong(0)
+
+    val IRV = sensitiveAttributes.map(sensitiveAttribute => {
+      val columnName = generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(sensitiveAttribute)
+      val numerator = RVSV.agg(sum(columnName)).first().getLong(0)
+      val division = numerator.toDouble / RV_TOTAL.toDouble
+      (-division) * log2(division)
+    }).sum
+
+    children.foreach(child => {
+
+      val childDenominator = RVC.agg(sum(generalizedField + "_RVC_" + getRoot(child))).first().getLong(0)
+      childDenominatorList += childDenominator
+      denominatorMap += (getRoot(child) -> childDenominator)
+
+    })
+
+    children.foreach(child => {
+      sensitiveAttributes.foreach(sensitiveAttribute => {
+        val first = RVCSV.agg(sum(generalizedField + "_RVCSV_" + getRoot(child) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute))).first()
+
+        if (denominatorMap.contains(getRoot(child)) && first.get(0) != null) {
+          val numerator = first.getLong(0)
+          val division = numerator.toDouble / denominatorMap(getRoot(child))
+          val entropy = (-division) * log2(division)
+          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        }
+      })
+    })
+
+    val childrenEntropy = children.map(child => {
+      val node = getRoot(child)
+      if (denominatorMap.contains(node)) {
+        val childDenominatorFromMap = denominatorMap(node)
+        val childEntropy = entropyMap(node)
+        (childDenominatorFromMap.toDouble / RV_TOTAL.toDouble) * childEntropy
+      } else {
+        0
+      }
+    }).sum
+
+    val infoGain = IRV - childrenEntropy
+
+    val anonymity = RV_TOTAL
+    val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
+    val anonymityLoss = (anonymity - anonymityPrime).toDouble
+
+    val score = if (anonymityLoss == 0.0) infoGain else infoGain.toDouble / anonymityLoss
+
+    subset.unpersist()
+    subsetChildren.unpersist()
+
+    score
+  }
 
   def calculateScore(fullPathMap: mutable.Map[String, mutable.Queue[String]], tree: Json, subsetWithK: DataFrame, fieldToScore: String): Double = {
 
