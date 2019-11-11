@@ -81,7 +81,7 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
-    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(8).cache()
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).cache()
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
@@ -329,7 +329,7 @@ object TopDownSpecialization extends Serializable {
     val denominatorMap: mutable.Map[String, Long] = mutable.Map[String, Long]()
     val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
     val entropyMap: mutable.Map[String, Double] = mutable.Map[String, Double]()
-    
+
     val subset = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
     val subsetChildren = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
 
@@ -363,15 +363,12 @@ object TopDownSpecialization extends Serializable {
 
     children.foreach(child => {
       sensitiveAttributes.foreach(sensitiveAttribute => {
-        val first = RVCSV.agg(sum(generalizedField + "_RVCSV_" + getRoot(child) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute))).first()
+        val numerator = RVCSV.agg(sum(generalizedField + "_RVCSV_" + getRoot(child) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute))).first().getLong(0)
 
-        if (denominatorMap.contains(getRoot(child)) && first.get(0) != null) {
-          val numerator = first.getLong(0)
-          val division = numerator.toDouble / denominatorMap(getRoot(child))
-          val entropy = (-division) * log2(division)
-          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
-        }
+        val division = numerator.toDouble / denominatorMap(getRoot(child))
+        val entropy = (-division) * log2(division)
+        if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+        else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
       })
     })
 
