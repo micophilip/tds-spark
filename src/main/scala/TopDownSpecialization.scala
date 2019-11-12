@@ -329,9 +329,13 @@ object TopDownSpecialization extends Serializable {
       case head :: tail =>
         val columnName = generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(head)
         val numerator = RVSV.agg(sum(columnName)).first().getLong(0)
-        val division = numerator.toDouble / RV_TOTAL.toDouble
-        val currentEntropy = (-division) * log2(division)
-        getEntropy(generalizedField, tail, sumSoFar + currentEntropy, RVSV, RV_TOTAL)
+        if (numerator != 0) {
+          val division = numerator.toDouble / RV_TOTAL.toDouble
+          val currentEntropy = (-division) * log2(division)
+          getEntropy(generalizedField, tail, sumSoFar + currentEntropy, RVSV, RV_TOTAL)
+        } else {
+          getEntropy(generalizedField, tail, sumSoFar, RVSV, RV_TOTAL)
+        }
     }
 
   }
@@ -343,8 +347,10 @@ object TopDownSpecialization extends Serializable {
       case Nil =>
       case head :: tail =>
         val childDenominator = RVC.agg(sum(generalizedField + "_RVC_" + getRoot(head))).first().getLong(0)
-        childDenominatorList += childDenominator
-        denominatorMap += (getRoot(head) -> childDenominator)
+        if (childDenominator != 0) {
+          childDenominatorList += childDenominator
+          denominatorMap += (getRoot(head) -> childDenominator)
+        }
         populateDenominatorMap(tail, RVC, generalizedField, childDenominatorList, denominatorMap)
     }
 
@@ -357,11 +363,12 @@ object TopDownSpecialization extends Serializable {
       case Nil =>
       case child :: tail =>
         val numerator = RVCSV.agg(sum(generalizedField + "_RVCSV_" + getRoot(child) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute))).first().getLong(0)
-
-        val division = numerator.toDouble / denominatorMap(getRoot(child))
-        val entropy = (-division) * log2(division)
-        if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-        else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        if (denominatorMap.contains(getRoot(child)) && numerator != 0) {
+          val division = numerator.toDouble / denominatorMap(getRoot(child))
+          val entropy = (-division) * log2(division)
+          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        }
         populateEntropyMap_SA(RVCSV, sensitiveAttribute, generalizedField, denominatorMap, entropyMap, tail)
     }
   }
@@ -418,21 +425,22 @@ object TopDownSpecialization extends Serializable {
 
     val RV_TOTAL = RV.agg(sum(generalizedField + "_RV")).first().getLong(0)
 
-    val IRV = getEntropy(generalizedField, sensitiveAttributes, 0.0, RVSV, RV_TOTAL)
+    val score = if (RV_TOTAL == 0) 0 else {
+      val IRV = getEntropy(generalizedField, sensitiveAttributes, 0.0, RVSV, RV_TOTAL)
 
-    populateDenominatorMap(children, RVC, generalizedField, childDenominatorList, denominatorMap)
+      populateDenominatorMap(children, RVC, generalizedField, childDenominatorList, denominatorMap)
 
-    populateEntropyMap(RVCSV, children, generalizedField, denominatorMap, entropyMap, sensitiveAttributes)
+      populateEntropyMap(RVCSV, children, generalizedField, denominatorMap, entropyMap, sensitiveAttributes)
 
-    val childrenEntropy = sumChildrenEntropy(children, denominatorMap, entropyMap, RV_TOTAL, 0.0)
+      val childrenEntropy = sumChildrenEntropy(children, denominatorMap, entropyMap, RV_TOTAL, 0.0)
 
-    val infoGain = IRV - childrenEntropy
+      val infoGain = IRV - childrenEntropy
 
-    val anonymity = RV_TOTAL
-    val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
-    val anonymityLoss = (anonymity - anonymityPrime).toDouble
-
-    val score = if (anonymityLoss == 0.0) infoGain else infoGain.toDouble / anonymityLoss
+      val anonymity = RV_TOTAL
+      val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
+      val anonymityLoss = (anonymity - anonymityPrime).toDouble
+      if (anonymityLoss == 0.0) infoGain else infoGain.toDouble / anonymityLoss
+    }
 
     subset.unpersist()
     subsetChildren.unpersist()
