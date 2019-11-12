@@ -211,7 +211,7 @@ object TopDownSpecialization extends Serializable {
         val QID = head.field("field").get.stringOrEmpty
         val tree = head.field("tree").get
         val parent = tree.field("parent").get.stringOrEmpty
-        val score = calculateScore(fullPathMap(QID), tree, subsetWithK, QID)
+        val score = calculateScoreOptimized(fullPathMap(QID), tree, subsetWithK, QID)
         scores += (score -> TopScoringAL(QID, parent))
         calculateScores(fullPathMap, QIDs, tail, subsetWithK, scores)
     }
