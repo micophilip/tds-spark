@@ -1,7 +1,7 @@
 import argonaut.Argonaut._
 import argonaut._
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{min, sum, udf, when, lit}
+import org.apache.spark.sql.functions.{lit, min, sum, udf, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.annotation.tailrec
@@ -321,6 +321,78 @@ object TopDownSpecialization extends Serializable {
 
   }
 
+  @tailrec
+  def getEntropy(generalizedField: String, rest: List[String], sumSoFar: Double, RVSV: DataFrame, RV_TOTAL: Long): Double = {
+
+    rest match {
+      case Nil => sumSoFar
+      case head :: tail =>
+        val columnName = generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(head)
+        val numerator = RVSV.agg(sum(columnName)).first().getLong(0)
+        val division = numerator.toDouble / RV_TOTAL.toDouble
+        val currentEntropy = (-division) * log2(division)
+        getEntropy(generalizedField, tail, sumSoFar + currentEntropy, RVSV, RV_TOTAL)
+    }
+
+  }
+
+  @tailrec
+  def populateDenominatorMap(children: JsonArray, RVC: DataFrame, generalizedField: String, childDenominatorList: ListBuffer[Long], denominatorMap: mutable.Map[String, Long]): Unit = {
+
+    children match {
+      case Nil =>
+      case head :: tail =>
+        val childDenominator = RVC.agg(sum(generalizedField + "_RVC_" + getRoot(head))).first().getLong(0)
+        childDenominatorList += childDenominator
+        denominatorMap += (getRoot(head) -> childDenominator)
+        populateDenominatorMap(tail, RVC, generalizedField, childDenominatorList, denominatorMap)
+    }
+
+  }
+
+  @tailrec
+  def populateEntropyMap_SA(RVCSV: DataFrame, sensitiveAttribute: String, generalizedField: String, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double], children: JsonArray): Unit = {
+
+    children match {
+      case Nil =>
+      case child :: tail =>
+        val numerator = RVCSV.agg(sum(generalizedField + "_RVCSV_" + getRoot(child) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute))).first().getLong(0)
+
+        val division = numerator.toDouble / denominatorMap(getRoot(child))
+        val entropy = (-division) * log2(division)
+        if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+        else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        populateEntropyMap_SA(RVCSV, sensitiveAttribute, generalizedField, denominatorMap, entropyMap, tail)
+    }
+  }
+
+  @tailrec
+  def populateEntropyMap(RVCSV: DataFrame, children: JsonArray, generalizedField: String, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double], rest: List[String]): Unit = {
+    rest match {
+      case Nil =>
+      case sensitiveAttribute :: tail =>
+        populateEntropyMap_SA(RVCSV, sensitiveAttribute, generalizedField, denominatorMap, entropyMap, children)
+        populateEntropyMap(RVCSV, children, generalizedField, denominatorMap, entropyMap, tail)
+    }
+  }
+
+  @tailrec
+  def sumChildrenEntropy(children: JsonArray, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double], RV_TOTAL: Long, sumSoFar: Double): Double = {
+    children match {
+      case Nil => sumSoFar
+      case child :: tail =>
+        val node = getRoot(child)
+        if (denominatorMap.contains(node)) {
+          val childDenominatorFromMap = denominatorMap(node)
+          val childEntropy = entropyMap(node)
+          val current = (childDenominatorFromMap.toDouble / RV_TOTAL.toDouble) * childEntropy
+          sumChildrenEntropy(tail, denominatorMap, entropyMap, RV_TOTAL, sumSoFar + current)
+        } else {
+          sumChildrenEntropy(tail, denominatorMap, entropyMap, RV_TOTAL, sumSoFar)
+        }
+    }
+  }
+
   def calculateScoreOptimized(fullPathMap: mutable.Map[String, mutable.Queue[String]], tree: Json, subsetWithK: DataFrame, fieldToScore: String): Double = {
     val generalizedField = s"$fieldToScore$GENERALIZED_POSTFIX"
     val generalizedValue = tree.field("parent").get.stringOrEmpty
@@ -346,42 +418,13 @@ object TopDownSpecialization extends Serializable {
 
     val RV_TOTAL = RV.agg(sum(generalizedField + "_RV")).first().getLong(0)
 
-    val IRV = sensitiveAttributes.map(sensitiveAttribute => {
-      val columnName = generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(sensitiveAttribute)
-      val numerator = RVSV.agg(sum(columnName)).first().getLong(0)
-      val division = numerator.toDouble / RV_TOTAL.toDouble
-      (-division) * log2(division)
-    }).sum
+    val IRV = getEntropy(generalizedField, sensitiveAttributes, 0.0, RVSV, RV_TOTAL)
 
-    children.foreach(child => {
+    populateDenominatorMap(children, RVC, generalizedField, childDenominatorList, denominatorMap)
 
-      val childDenominator = RVC.agg(sum(generalizedField + "_RVC_" + getRoot(child))).first().getLong(0)
-      childDenominatorList += childDenominator
-      denominatorMap += (getRoot(child) -> childDenominator)
+    populateEntropyMap(RVCSV, children, generalizedField, denominatorMap, entropyMap, sensitiveAttributes)
 
-    })
-
-    children.foreach(child => {
-      sensitiveAttributes.foreach(sensitiveAttribute => {
-        val numerator = RVCSV.agg(sum(generalizedField + "_RVCSV_" + getRoot(child) + "_" + sensitiveAttributes.indexOf(sensitiveAttribute))).first().getLong(0)
-
-        val division = numerator.toDouble / denominatorMap(getRoot(child))
-        val entropy = (-division) * log2(division)
-        if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-        else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
-      })
-    })
-
-    val childrenEntropy = children.map(child => {
-      val node = getRoot(child)
-      if (denominatorMap.contains(node)) {
-        val childDenominatorFromMap = denominatorMap(node)
-        val childEntropy = entropyMap(node)
-        (childDenominatorFromMap.toDouble / RV_TOTAL.toDouble) * childEntropy
-      } else {
-        0
-      }
-    }).sum
+    val childrenEntropy = sumChildrenEntropy(children, denominatorMap, entropyMap, RV_TOTAL, 0.0)
 
     val infoGain = IRV - childrenEntropy
 
