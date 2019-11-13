@@ -1,7 +1,7 @@
 import argonaut.Argonaut._
 import argonaut._
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{lit, min, sum, udf, when}
+import org.apache.spark.sql.functions.{min, sum, udf, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.annotation.tailrec
@@ -460,93 +460,6 @@ object TopDownSpecialization extends Serializable {
     subsetChildren.unpersist()
 
     score
-  }
-
-  def calculateScore(fullPathMap: mutable.Map[String, mutable.Queue[String]], tree: Json, subsetWithK: DataFrame, fieldToScore: String): Double = {
-
-    val generalizedField = s"$fieldToScore$GENERALIZED_POSTFIX"
-    val generalizedValue = tree.field("parent").get.stringOrEmpty
-
-    val children = tree.field("leaves").get.arrayOrEmpty
-    val denominatorMap: mutable.Map[String, Long] = mutable.Map[String, Long]()
-    val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
-    val entropyMap: mutable.Map[String, Double] = mutable.Map[String, Double]()
-
-    val subsetAnyEdu = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
-
-    val denominatorDf = subsetAnyEdu.where(s"$generalizedField = '$generalizedValue'").agg(sum(countColumn)).first
-
-    if (denominatorDf.get(0) == null) {
-      0
-    } else {
-      subsetWithK.cache()
-      subsetAnyEdu.cache()
-      val denominator = denominatorDf.getLong(0)
-      val entropy = sensitiveAttributes.map(sensitiveAttribute => {
-        val numerator = subsetAnyEdu.where(s"$sensitiveAttributeColumn = '$sensitiveAttribute' and $generalizedField = '$generalizedValue'").agg(sum(countColumn)).first
-        if (numerator.get(0) != null) {
-          val division = numerator.getLong(0).toDouble / denominator.toDouble
-          (-division) * log2(division)
-        } else {
-          0
-        }
-      }).sum
-
-      val childEntropyDf = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
-
-      children.foreach(child => {
-        val first = childEntropyDf.where(s"$generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first()
-        if (first.get(0) != null) {
-          val childDenominator = first.getLong(0)
-          childDenominatorList += childDenominator
-          denominatorMap += (getRoot(child) -> childDenominator)
-        }
-      })
-
-      children.foreach(child => {
-        sensitiveAttributes.foreach(sensitiveAttribute => {
-          val first = childEntropyDf.where(s"$sensitiveAttributeColumn = '$sensitiveAttribute' and $generalizedField = '${getRoot(child)}'").agg(sum(countColumn)).first
-          if (denominatorMap.contains(getRoot(child)) && first.get(0) != null) {
-            val numerator = first.getLong(0)
-            val division = numerator.toDouble / denominatorMap(getRoot(child))
-            val entropy = (-division) * log2(division)
-            if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-            else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
-          }
-        })
-      })
-
-      val childrenEntropy = children.map(child => {
-        val node = getRoot(child)
-        if (denominatorMap.contains(node)) {
-          val childDenominatorFromMap = denominatorMap(node)
-          val childEntropy = entropyMap(node)
-          (childDenominatorFromMap.toDouble / denominator.toDouble) * childEntropy
-        } else {
-          0
-        }
-      }).sum
-
-      val infoGain = entropy - childrenEntropy
-
-      val anonymity = denominator
-      val anonymityPrime = if (childDenominatorList.isEmpty) 0 else childDenominatorList.min
-      val anonymityLoss = (anonymity - anonymityPrime).toDouble
-
-      val score = if (anonymityLoss == 0.0) infoGain else infoGain.toDouble / anonymityLoss
-
-      println(s"Info gain is $infoGain")
-      println(s"anonymity is $anonymity")
-      println(s"anonymityPrime is $anonymityPrime")
-      println(s"Score for ${fieldToScore}_$generalizedValue is $score")
-
-      subsetAnyEdu.unpersist()
-      subsetWithK.unpersist()
-
-      score
-
-    }
-
   }
 
 }
