@@ -282,20 +282,20 @@ object TopDownSpecialization extends Serializable {
   })
 
   @tailrec
-  def getRVSV(generalizedField: String, generalizedValue: String, dataFrame: DataFrame, rest: List[String]): DataFrame = {
+  def getRVSV(generalizedField: String, generalizedValue: String, rest: List[String])(dataFrame: DataFrame): DataFrame = {
     rest match {
       case Nil => dataFrame
       case head :: tail =>
-        getRVSV(generalizedField, generalizedValue, dataFrame.withColumn(generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(head), when(dataFrame(generalizedField) === generalizedValue and dataFrame(sensitiveAttributeColumn) === head, dataFrame(countColumn)).otherwise(0)), tail)
+        getRVSV(generalizedField, generalizedValue, tail)(dataFrame.withColumn(generalizedField + "_RVSV_" + sensitiveAttributes.indexOf(head), when(dataFrame(generalizedField) === generalizedValue and dataFrame(sensitiveAttributeColumn) === head, dataFrame(countColumn)).otherwise(0)))
     }
   }
 
   @tailrec
-  def getRVC(generalizedField: String, dataFrame: DataFrame, children: JsonArray): DataFrame = {
+  def getRVC(generalizedField: String, children: JsonArray)(dataFrame: DataFrame): DataFrame = {
     children match {
       case Nil => dataFrame
       case head :: tail =>
-        getRVC(generalizedField, dataFrame.withColumn(generalizedField + "_RVC_" + getRoot(head), when(dataFrame(generalizedField) === getRoot(head), dataFrame(countColumn)).otherwise(0)), tail)
+        getRVC(generalizedField, tail)(dataFrame.withColumn(generalizedField + "_RVC_" + getRoot(head), when(dataFrame(generalizedField) === getRoot(head), dataFrame(countColumn)).otherwise(0)))
     }
   }
 
@@ -311,12 +311,12 @@ object TopDownSpecialization extends Serializable {
   }
 
   @tailrec
-  def getRVCSV(generalizedField: String, dataFrame: DataFrame, children: JsonArray, rest: List[String]): DataFrame = {
+  def getRVCSV(generalizedField: String, children: JsonArray, rest: List[String])(dataFrame: DataFrame): DataFrame = {
 
     rest match {
       case Nil => dataFrame
       case head :: tail =>
-        getRVCSV(generalizedField, getRVCSV_SA(generalizedField, dataFrame, children, head), children, tail)
+        getRVCSV(generalizedField, children, tail)(getRVCSV_SA(generalizedField, dataFrame, children, head))
     }
 
   }
@@ -412,11 +412,9 @@ object TopDownSpecialization extends Serializable {
 
     val RV = subset.withColumn(generalizedField + "_RV", when(subset(generalizedField) === generalizedValue, subset(countColumn)).otherwise(0))
 
-    val RVSV = getRVSV(generalizedField, generalizedValue, subset, sensitiveAttributes)
+    val RVSV = subset.transform(getRVSV(generalizedField, generalizedValue, sensitiveAttributes))
 
-    val RVC = getRVC(generalizedField, subsetChildren, children)
-
-    val RVCSV = getRVCSV(generalizedField, RVC, children, sensitiveAttributes)
+    val RVCSV = subsetChildren.transform(getRVC(generalizedField, children)).transform(getRVCSV(generalizedField, children, sensitiveAttributes))
 
     val RV_TOTAL = RV.agg(sum(generalizedField + "_RV")).first().getLong(0)
 
