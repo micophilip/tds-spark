@@ -416,7 +416,7 @@ object TopDownSpecialization extends Serializable {
 
     val RVC = getRVC(generalizedField, subsetChildren, children)
 
-    val RVCSV = getRVCSV(generalizedField, subsetChildren, children, sensitiveAttributes)
+    val RVCSV = getRVCSV(generalizedField, RVC, children, sensitiveAttributes)
 
     val RV_TOTAL = RV.agg(sum(generalizedField + "_RV")).first().getLong(0)
 
@@ -439,15 +439,12 @@ object TopDownSpecialization extends Serializable {
         })
       }).toMap
 
-      val denominatorMapDf = RVC.agg(denominatorMapPopulated).cache()
-
-      val entropyMapDf = RVCSV.agg(entropyMapPopulated).cache()
+      val denominatorMapDf = RVCSV.agg(denominatorMapPopulated ++ entropyMapPopulated).cache()
 
       populateDenominatorMap(generalizedField, children, denominatorMapDf, childDenominatorList, denominatorMap)
 
-      populateChildEntropyMap(generalizedField, children, entropyMapDf, denominatorMap, entropyMap)
+      populateChildEntropyMap(generalizedField, children, denominatorMapDf, denominatorMap, entropyMap)
 
-      entropyMapDf.unpersist()
       denominatorMapDf.unpersist()
       IRVDf.unpersist()
 
