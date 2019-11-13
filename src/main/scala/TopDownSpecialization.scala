@@ -338,6 +338,63 @@ object TopDownSpecialization extends Serializable {
     }
   }
 
+  @tailrec
+  def getIRVSum(generalizedField: String, IRVDf: DataFrame, rest: List[String], sumSoFar: Double, RV_TOTAL: Long): Double = {
+    rest match {
+      case Nil => sumSoFar
+      case sensitiveAttribute :: tail =>
+        val numerator = IRVDf.select(s"sum(${generalizedField}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)})").first().getLong(0)
+        if (numerator == 0) {
+          getIRVSum(generalizedField, IRVDf, tail, sumSoFar, RV_TOTAL)
+        } else {
+          val division = numerator.toDouble / RV_TOTAL.toDouble
+          val current = (-division) * log2(division)
+          getIRVSum(generalizedField, IRVDf, tail, sumSoFar + current, RV_TOTAL)
+        }
+    }
+  }
+
+  @tailrec
+  def populateDenominatorMap(generalizedField: String, children: JsonArray, denominatorMapDf: DataFrame, childDenominatorList: ListBuffer[Long], denominatorMap: mutable.Map[String, Long]): Unit = {
+    children match {
+      case Nil =>
+      case child :: tail =>
+        val childDenominator = denominatorMapDf.select(s"sum(${generalizedField}_RVC_${getRoot(child)})").first().getLong(0)
+        if (childDenominator != 0) {
+          childDenominatorList += childDenominator
+          denominatorMap += (getRoot(child) -> childDenominator)
+        }
+        populateDenominatorMap(generalizedField, tail, denominatorMapDf, childDenominatorList, denominatorMap)
+    }
+  }
+
+  @tailrec
+  def populateChildEntropy_SA(generalizedField: String, rest: List[String], entropyMapDf: DataFrame, child: Json, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double]): Unit = {
+
+    rest match {
+      case Nil =>
+      case sensitiveAttribute :: tail =>
+        val numerator = entropyMapDf.select(s"sum(${generalizedField}_RVCSV_${getRoot(child)}_${sensitiveAttributes.indexOf(sensitiveAttribute)})").first().getLong(0)
+        if (denominatorMap.contains(getRoot(child)) && numerator != 0) {
+          val division = numerator.toDouble / denominatorMap(getRoot(child))
+          val entropy = (-division) * log2(division)
+          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+        }
+        populateChildEntropy_SA(generalizedField, tail, entropyMapDf, child, denominatorMap, entropyMap)
+    }
+  }
+
+  @tailrec
+  def populateChildEntropyMap(generalizedField: String, children: JsonArray, entropyMapDf: DataFrame, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double]): Unit = {
+    children match {
+      case Nil =>
+      case child :: tail =>
+        populateChildEntropy_SA(generalizedField, sensitiveAttributes, entropyMapDf, child, denominatorMap, entropyMap)
+        populateChildEntropyMap(generalizedField, tail, entropyMapDf, denominatorMap, entropyMap)
+    }
+  }
+
   def calculateScoreOptimized(fullPathMap: mutable.Map[String, mutable.Queue[String]], tree: Json, subsetWithK: DataFrame, fieldToScore: String): Double = {
     val generalizedField = s"$fieldToScore$GENERALIZED_POSTFIX"
     val generalizedValue = tree.field("parent").get.stringOrEmpty
@@ -370,14 +427,7 @@ object TopDownSpecialization extends Serializable {
 
       val IRVDf = RVSV.agg(IRVMap).cache()
 
-      val IRV = sensitiveAttributes.map(sensitiveAttribute => {
-        val numerator = IRVDf.select(s"sum(${generalizedField}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)})").first().getLong(0)
-        if (numerator == 0) 0
-        else {
-          val division = numerator.toDouble / RV_TOTAL.toDouble
-          (-division) * log2(division)
-        }
-      }).sum
+      val IRV = getIRVSum(generalizedField, IRVDf, sensitiveAttributes, 0.0, RV_TOTAL)
 
       val denominatorMapPopulated: Map[String, String] = children.map(child => {
         generalizedField + "_RVC_" + getRoot(child) -> "sum"
@@ -393,25 +443,9 @@ object TopDownSpecialization extends Serializable {
 
       val entropyMapDf = RVCSV.agg(entropyMapPopulated).cache()
 
-      children.foreach(child => {
-        val childDenominator = denominatorMapDf.select(s"sum(${generalizedField}_RVC_${getRoot(child)})").first().getLong(0)
-        if (childDenominator != 0) {
-          childDenominatorList += childDenominator
-          denominatorMap += (getRoot(child) -> childDenominator)
-        }
-      })
+      populateDenominatorMap(generalizedField, children, denominatorMapDf, childDenominatorList, denominatorMap)
 
-      children.foreach(child => {
-        sensitiveAttributes.foreach(sensitiveAttribute => {
-          val numerator = entropyMapDf.select(s"sum(${generalizedField}_RVCSV_${getRoot(child)}_${sensitiveAttributes.indexOf(sensitiveAttribute)})").first().getLong(0)
-          if (denominatorMap.contains(getRoot(child)) && numerator != 0) {
-            val division = numerator.toDouble / denominatorMap(getRoot(child))
-            val entropy = (-division) * log2(division)
-            if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-            else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
-          }
-        })
-      })
+      populateChildEntropyMap(generalizedField, children, entropyMapDf, denominatorMap, entropyMap)
 
       entropyMapDf.unpersist()
       denominatorMapDf.unpersist()
