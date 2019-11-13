@@ -1,8 +1,9 @@
-import TopDownSpecialization.spark
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 import scala.collection.mutable.ListBuffer
+
+import TDSConstants._
 
 object ExpandDataset extends Serializable {
 

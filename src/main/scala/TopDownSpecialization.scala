@@ -10,12 +10,11 @@ import scala.collection.mutable.ListBuffer
 import scala.io.Source
 import scala.math._
 
-object TopDownSpecialization extends Serializable {
+case class TopScoringAL(QID: String, parent: String)
 
-  case class TopScoringAL(QID: String, parent: String)
+object TDSConstants {
 
-  val spark: SparkSession = SparkSession.builder().appName("TopDownSpecialization")
-    .config("spark.master", "local[*]").getOrCreate()
+  val spark: SparkSession = SparkSession.builder().appName("TopDownSpecialization").getOrCreate()
 
   val GENERALIZED_POSTFIX = "_generalized"
 
@@ -23,6 +22,11 @@ object TopDownSpecialization extends Serializable {
   val sensitiveAttributeColumn = "income"
 
   val countColumn = "count"
+}
+
+import TDSConstants._
+
+object TopDownSpecialization extends Serializable {
 
   def main(args: Array[String]): Unit = {
 
@@ -81,7 +85,7 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
-    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(32).cache()
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(12).cache()
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")

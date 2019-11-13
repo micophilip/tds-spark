@@ -7,8 +7,10 @@ val argonautVersion = "6.2.2"
 val scalaTestVersion = "3.0.8"
 
 libraryDependencies ++= Seq(
-  "org.apache.spark" %% "spark-core" % sparkVersion,
-  "org.apache.spark" %% "spark-sql" % sparkVersion,
+  "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
+  "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
   "io.argonaut" %% "argonaut" % argonautVersion,
   "org.scalatest" %% "scalatest" % scalaTestVersion % "test"
 )
+
+test in assembly := {}
