@@ -34,6 +34,7 @@ object TopDownSpecialization extends Serializable {
     val taxonomyTreePath = args(1)
     val k = args(2).toInt
     val start = System.currentTimeMillis()
+    val parallelism = spark.sparkContext.defaultParallelism
 
     println(s"Anonymizing dataset in $inputPath")
     println(s"Running TDS with k = $k")
@@ -102,6 +103,7 @@ object TopDownSpecialization extends Serializable {
     val finish = System.currentTimeMillis()
 
     println(s"Anonymized dataset in ${finish - start} ms")
+    println(s"Parallelism used was $parallelism")
 
     generalizedDF.unpersist()
 
