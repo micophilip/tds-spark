@@ -4,11 +4,11 @@ Proposed top-down specialization algorithm on Apache Spark for COMP 5704
 
 # Build
 
-Run `build.sbt`
+Run `sbt build`
 
 # Package
 
-Run `sbt package` task
+Run `sbt package` task for local spark, and `sbt assembly` for Spark Submit
 
 # Run
 
@@ -18,11 +18,17 @@ Run `sbt package` task
 
 ## Performance
 
-|Records|k|Nodes|Partitions|Time (in ms)|
-|---|---|---|---|---|
-|32562|100|8|1|119371|
-|32562|100|8|8|73119|
-|32562|100|1|1|391149|
+|Records|k|Nodes|Cores|Partitions|Time (in ms)|
+|---|---|---|---|---|---|
+|32562|100|1|1|1|240744|
+|32562|100|1|8|1|81978|
+|32562|100|1|8|8|34863|
+|32562|100|1|16|16|44157|
+|32562|100|1|16|8|41208|
+|32562|100|1|16|4|42621|
+|32562|50|1|8|8|55188|
+|250000|100|1|8|8|161497|
+|250000|100|1|16|32|162399|
 
 
 # Useful documentation

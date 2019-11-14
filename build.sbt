@@ -2,7 +2,7 @@ name := "code"
 version := "0.1"
 scalaVersion := "2.12.10"
 
-val sparkVersion = "2.4.4"
+val sparkVersion = "2.4.2"
 val argonautVersion = "6.2.2"
 val scalaTestVersion = "3.0.8"
 

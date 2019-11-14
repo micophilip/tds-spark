@@ -13,7 +13,7 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
   val taxonomyTree: String = try resource.mkString finally resource.close()
   val taxonomyTreeJson: Json = taxonomyTree.parseOption.get
 
-  val spark: SparkSession = TopDownSpecialization.spark
+  val spark: SparkSession = TDSConstants.spark
 
   val testData: String = getClass.getResource("/test_data.csv").getPath
 
@@ -70,7 +70,7 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
   test("anonymize should anonymize") {
     val field = "education"
     val QIDs = List(field)
-    val QIDsGeneralized = QIDs.map(_ + TopDownSpecialization.GENERALIZED_POSTFIX)
+    val QIDsGeneralized = QIDs.map(_ + TDSConstants.GENERALIZED_POSTFIX)
     val QIDsUnionSA = QIDs ::: List("income")
     val subset = input.select(QIDsUnionSA.head, QIDsUnionSA.tail: _*)
     val subsetWithK = subset.groupBy(QIDsUnionSA.head, QIDsUnionSA.tail: _*).count()
