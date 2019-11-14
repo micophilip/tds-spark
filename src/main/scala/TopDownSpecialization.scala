@@ -3,6 +3,7 @@ import argonaut._
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{min, sum, udf, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.storage.StorageLevel
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -86,7 +87,7 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
-    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(8).cache()
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(8).persist(StorageLevel.MEMORY_ONLY)
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
@@ -167,7 +168,7 @@ object TopDownSpecialization extends Serializable {
 
     val originalMap = mutable.Map[String, mutable.Map[String, mutable.Queue[String]]]()
     val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
-    subsetWithK.cache()
+    subsetWithK.persist(StorageLevel.MEMORY_ONLY)
 
     @tailrec
     def anonymizeOneLevel(originalPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], anonymizationLevels: JsonArray): mutable.Map[String, mutable.Map[String, mutable.Queue[String]]] = {
@@ -413,8 +414,8 @@ object TopDownSpecialization extends Serializable {
     val subset = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
     val subsetChildren = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
 
-    subset.cache()
-    subsetChildren.cache()
+    subset.persist(StorageLevel.MEMORY_ONLY)
+    subsetChildren.persist(StorageLevel.MEMORY_ONLY)
 
     val RV = subset.withColumn(generalizedField + "_RV", when(subset(generalizedField) === generalizedValue, subset(countColumn)).otherwise(0))
 
@@ -429,7 +430,7 @@ object TopDownSpecialization extends Serializable {
         s"${generalizedField}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)}" -> "sum"
       }).toMap
 
-      val IRVDf = RVSV.agg(IRVMap).cache()
+      val IRVDf = RVSV.agg(IRVMap).persist(StorageLevel.MEMORY_ONLY)
 
       val IRV = getIRVSum(generalizedField, IRVDf, sensitiveAttributes, 0.0, RV_TOTAL)
 
@@ -443,7 +444,7 @@ object TopDownSpecialization extends Serializable {
         })
       }).toMap
 
-      val denominatorMapDf = RVCSV.agg(denominatorMapPopulated ++ entropyMapPopulated).cache()
+      val denominatorMapDf = RVCSV.agg(denominatorMapPopulated ++ entropyMapPopulated).persist(StorageLevel.MEMORY_ONLY)
 
       populateDenominatorMap(generalizedField, children, denominatorMapDf, childDenominatorList, denominatorMap)
 
