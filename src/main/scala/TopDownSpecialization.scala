@@ -87,7 +87,7 @@ object TopDownSpecialization extends Serializable {
      * Remove root of top scoring AL and add its children to ALs
      */
 
-    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).repartition(8).persist(StorageLevel.MEMORY_ONLY)
+    val generalizedDF = generalize(fullPathMap, subsetWithK, QIDsOnly, 0).persist(StorageLevel.MEMORY_ONLY)
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
