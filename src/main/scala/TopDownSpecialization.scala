@@ -166,7 +166,6 @@ object TopDownSpecialization extends Serializable {
 
   def anonymize(fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], QIDsOnly: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, requestedK: Int): mutable.Map[String, mutable.Map[String, mutable.Queue[String]]] = {
 
-    val originalMap = mutable.Map[String, mutable.Map[String, mutable.Queue[String]]]()
     val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
     subsetWithK.persist(StorageLevel.MEMORY_ONLY)
 
@@ -191,7 +190,7 @@ object TopDownSpecialization extends Serializable {
       }
     }
 
-    val anonymized = anonymizeOneLevel(originalMap, fullPathMap, anonymizationLevels)
+    val anonymized = anonymizeOneLevel(fullPathMap, fullPathMap, anonymizationLevels)
 
     subsetWithK.unpersist()
 
