@@ -168,7 +168,6 @@ object TopDownSpecialization extends Serializable {
   def anonymize(fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], QIDsOnly: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, requestedK: Int): mutable.Map[String, mutable.Map[String, mutable.Queue[String]]] = {
 
     val QIDsGeneralized = QIDsOnly.map(_ + GENERALIZED_POSTFIX)
-    subsetWithK.persist(StorageLevel.MEMORY_ONLY)
 
     @tailrec
     def anonymizeOneLevel(originalPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], anonymizationLevels: JsonArray): mutable.Map[String, mutable.Map[String, mutable.Queue[String]]] = {
@@ -191,8 +190,6 @@ object TopDownSpecialization extends Serializable {
     }
 
     val anonymized = anonymizeOneLevel(fullPathMap, fullPathMap, anonymizationLevels)
-
-    subsetWithK.unpersist()
 
     anonymized
   }
@@ -459,10 +456,10 @@ object TopDownSpecialization extends Serializable {
     val aggregationMapDf = df.agg(aggregations)
 
     val keys = aggregationMapDf.columns
-    val values = aggregationMapDf.collectAsList()
+    val values = aggregationMapDf.toLocalIterator().next()
 
     keys.zipWithIndex.map(key => {
-      key._1 -> values.get(0).getLong(key._2)
+      key._1 -> values.getLong(key._2)
     }).toMap
 
   }
