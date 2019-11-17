@@ -1,7 +1,7 @@
 import argonaut.Argonaut._
 import argonaut._
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{min, sum, udf, when}
+import org.apache.spark.sql.functions.{col, min, monotonically_increasing_id, sum, udf, when}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.storage.StorageLevel
 
@@ -34,7 +34,6 @@ object TopDownSpecialization extends Serializable {
     val inputPath = args(0)
     val taxonomyTreePath = args(1)
     val k = args(2).toInt
-    val start = System.currentTimeMillis()
     val parallelism = spark.sparkContext.defaultParallelism
 
     println(s"Anonymizing dataset in $inputPath")
@@ -60,6 +59,7 @@ object TopDownSpecialization extends Serializable {
 
     // Step 1.2: Tuples with the same quasi-identifier values are grouped together
     val subsetWithK = subset.groupBy(QIDsUnionSensitiveAttributes.head, QIDsUnionSensitiveAttributes.tail: _*).count()
+      .withColumn("rowId", monotonically_increasing_id).repartition(col("rowId"))
 
     /*
      * Step 2: Generalization
@@ -91,6 +91,7 @@ object TopDownSpecialization extends Serializable {
     val kCurrent = calculateK(generalizedDF, QIDsGeneralized)
 
     println(s"Initial K is $kCurrent")
+    val start = System.currentTimeMillis()
 
     if (kCurrent > k) {
       val anonymizedLevels = anonymize(fullPathMap, QIDsOnly, anonymizationLevels, generalizedDF, k)
@@ -171,9 +172,8 @@ object TopDownSpecialization extends Serializable {
 
     @tailrec
     def anonymizeOneLevel(originalPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], anonymizationLevels: JsonArray): mutable.Map[String, mutable.Map[String, mutable.Queue[String]]] = {
-      val updatedScores = calculateScores(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK, mutable.Map[Double, TopScoringAL]())
-      val maxScore = updatedScores.keys.toList.max
-      val maxScoreAL = updatedScores(maxScore)
+      val df = prepareAggregationsDF(fullPathMap, QIDsOnly, anonymizationLevels, subsetWithK)
+      val maxScoreAL = findBestAL(df, QIDsOnly, anonymizationLevels)
       val maxScoreColumn = maxScoreAL.QID
       val maxScoreParent = maxScoreAL.parent
       val newALs = goToNextLevel(anonymizationLevels, maxScoreColumn, maxScoreParent)
@@ -206,22 +206,6 @@ object TopDownSpecialization extends Serializable {
 
   def isLeaf(tree: Json): Boolean = {
     getChildren(tree).isEmpty
-  }
-
-  @tailrec
-  def calculateScores(fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], QIDs: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame, scores: mutable.Map[Double, TopScoringAL]): mutable.Map[Double, TopScoringAL] = {
-
-    anonymizationLevels match {
-      case Nil => scores
-      case head :: tail =>
-        val QID = head.field("field").get.stringOrEmpty
-        val tree = head.field("tree").get
-        val parent = tree.field("parent").get.stringOrEmpty
-        val score = calculateScoreOptimized(fullPathMap(QID), tree, subsetWithK, QID)
-        scores += (score -> TopScoringAL(QID, parent))
-        calculateScores(fullPathMap, QIDs, tail, subsetWithK, scores)
-    }
-
   }
 
   def calculateK(dataset: DataFrame, columns: List[String]): Long = {
@@ -344,113 +328,48 @@ object TopDownSpecialization extends Serializable {
     }
   }
 
-  @tailrec
-  def getIRVSum(generalizedField: String, IRVDf: DataFrame, rest: List[String], sumSoFar: Double, RV_TOTAL: Long): Double = {
-    rest match {
-      case Nil => sumSoFar
-      case sensitiveAttribute :: tail =>
-        val numerator = IRVDf.select(s"sum(${generalizedField}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)})").first().getLong(0)
+
+  def calculateScore(aggregationMap: Map[String, Long], QID: String, parent: String, tree: Json): Double = {
+    val RV_TOTAL = aggregationMap(s"sum(${QID}_${parent}_RV)")
+
+    if (RV_TOTAL == 0) {
+      0
+    } else {
+
+      val children = tree.field("leaves").get.arrayOrEmpty
+      val denominatorMap: mutable.Map[String, Long] = mutable.Map[String, Long]()
+      val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
+      val entropyMap: mutable.Map[String, Double] = mutable.Map[String, Double]()
+      val generalizedChildField = s"$QID${GENERALIZED_POSTFIX}_CHILD"
+
+      val IRV = sensitiveAttributes.map(sensitiveAttribute => {
+        val numerator = aggregationMap(s"sum(${QID}_${parent}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)})")
         if (numerator == 0) {
-          getIRVSum(generalizedField, IRVDf, tail, sumSoFar, RV_TOTAL)
+          0
         } else {
           val division = numerator.toDouble / RV_TOTAL.toDouble
-          val current = (-division) * log2(division)
-          getIRVSum(generalizedField, IRVDf, tail, sumSoFar + current, RV_TOTAL)
+          (-division) * log2(division)
         }
-    }
-  }
+      }).sum
 
-  @tailrec
-  def populateDenominatorMap(generalizedField: String, children: JsonArray, denominatorMapDf: DataFrame, childDenominatorList: ListBuffer[Long], denominatorMap: mutable.Map[String, Long]): Unit = {
-    children match {
-      case Nil =>
-      case child :: tail =>
-        val childDenominator = denominatorMapDf.select(s"sum(${generalizedField}_RVC_${getRoot(child)})").first().getLong(0)
+      children.foreach(child => {
+        val childDenominator = aggregationMap(s"sum(${generalizedChildField}_RVC_${getRoot(child)})")
         if (childDenominator != 0) {
           childDenominatorList += childDenominator
           denominatorMap += (getRoot(child) -> childDenominator)
         }
-        populateDenominatorMap(generalizedField, tail, denominatorMapDf, childDenominatorList, denominatorMap)
-    }
-  }
 
-  @tailrec
-  def populateChildEntropy_SA(generalizedField: String, rest: List[String], entropyMapDf: DataFrame, child: Json, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double]): Unit = {
-
-    rest match {
-      case Nil =>
-      case sensitiveAttribute :: tail =>
-        val numerator = entropyMapDf.select(s"sum(${generalizedField}_RVCSV_${getRoot(child)}_${sensitiveAttributes.indexOf(sensitiveAttribute)})").first().getLong(0)
-        if (denominatorMap.contains(getRoot(child)) && numerator != 0) {
-          val division = numerator.toDouble / denominatorMap(getRoot(child))
-          val entropy = (-division) * log2(division)
-          if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
-          else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
-        }
-        populateChildEntropy_SA(generalizedField, tail, entropyMapDf, child, denominatorMap, entropyMap)
-    }
-  }
-
-  @tailrec
-  def populateChildEntropyMap(generalizedField: String, children: JsonArray, entropyMapDf: DataFrame, denominatorMap: mutable.Map[String, Long], entropyMap: mutable.Map[String, Double]): Unit = {
-    children match {
-      case Nil =>
-      case child :: tail =>
-        populateChildEntropy_SA(generalizedField, sensitiveAttributes, entropyMapDf, child, denominatorMap, entropyMap)
-        populateChildEntropyMap(generalizedField, tail, entropyMapDf, denominatorMap, entropyMap)
-    }
-  }
-
-  def calculateScoreOptimized(fullPathMap: mutable.Map[String, mutable.Queue[String]], tree: Json, subsetWithK: DataFrame, fieldToScore: String): Double = {
-    val generalizedField = s"$fieldToScore$GENERALIZED_POSTFIX"
-    val generalizedValue = tree.field("parent").get.stringOrEmpty
-
-    val children = tree.field("leaves").get.arrayOrEmpty
-    val denominatorMap: mutable.Map[String, Long] = mutable.Map[String, Long]()
-    val childDenominatorList: ListBuffer[Long] = ListBuffer[Long]()
-    val entropyMap: mutable.Map[String, Double] = mutable.Map[String, Double]()
-
-    val subset = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
-    val subsetChildren = subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
-
-    subset.persist(StorageLevel.MEMORY_ONLY)
-    subsetChildren.persist(StorageLevel.MEMORY_ONLY)
-
-    val RV = subset.withColumn(generalizedField + "_RV", when(subset(generalizedField) === generalizedValue, subset(countColumn)).otherwise(0))
-
-    val RVSV = subset.transform(getRVSV(generalizedField, generalizedValue, sensitiveAttributes))
-
-    val RVCSV = subsetChildren.transform(getRVC(generalizedField, children)).transform(getRVCSV(generalizedField, children, sensitiveAttributes))
-
-    val RV_TOTAL = RV.agg(sum(generalizedField + "_RV")).first().getLong(0)
-
-    val score = if (RV_TOTAL == 0) 0 else {
-      val IRVMap: Map[String, String] = sensitiveAttributes.map(sensitiveAttribute => {
-        s"${generalizedField}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)}" -> "sum"
-      }).toMap
-
-      val IRVDf = RVSV.agg(IRVMap).persist(StorageLevel.MEMORY_ONLY)
-
-      val IRV = getIRVSum(generalizedField, IRVDf, sensitiveAttributes, 0.0, RV_TOTAL)
-
-      val denominatorMapPopulated: Map[String, String] = children.map(child => {
-        generalizedField + "_RVC_" + getRoot(child) -> "sum"
-      }).toMap
-
-      val entropyMapPopulated: Map[String, String] = children.flatMap(child => {
-        sensitiveAttributes.map(sensitiveAttribute => {
-          s"${generalizedField}_RVCSV_${getRoot(child)}_${sensitiveAttributes.indexOf(sensitiveAttribute)}" -> "sum"
+        sensitiveAttributes.foreach(sensitiveAttribute => {
+          val numerator = aggregationMap(s"sum(${generalizedChildField}_RVCSV_${getRoot(child)}_${sensitiveAttributes.indexOf(sensitiveAttribute)})")
+          if (denominatorMap.contains(getRoot(child)) && numerator != 0) {
+            val division = numerator.toDouble / denominatorMap(getRoot(child))
+            val entropy = (-division) * log2(division)
+            if (entropyMap.get(getRoot(child)).isEmpty) entropyMap += (getRoot(child) -> entropy)
+            else entropyMap += (getRoot(child) -> (entropyMap(getRoot(child)) + entropy))
+          }
         })
-      }).toMap
 
-      val denominatorMapDf = RVCSV.agg(denominatorMapPopulated ++ entropyMapPopulated).persist(StorageLevel.MEMORY_ONLY)
-
-      populateDenominatorMap(generalizedField, children, denominatorMapDf, childDenominatorList, denominatorMap)
-
-      populateChildEntropyMap(generalizedField, children, denominatorMapDf, denominatorMap, entropyMap)
-
-      denominatorMapDf.unpersist()
-      IRVDf.unpersist()
+      })
 
       val childrenEntropy = sumChildrenEntropy(children, denominatorMap, entropyMap, RV_TOTAL, 0.0)
 
@@ -462,10 +381,110 @@ object TopDownSpecialization extends Serializable {
       if (anonymityLoss == 0.0) infoGain else infoGain.toDouble / anonymityLoss
     }
 
-    subset.unpersist()
-    subsetChildren.unpersist()
+  }
 
-    score
+  @tailrec
+  def prepareAggregationsDF(fullPathMap: mutable.Map[String, mutable.Map[String, mutable.Queue[String]]], QIDs: List[String], anonymizationLevels: JsonArray, subsetWithK: DataFrame): DataFrame = {
+
+    anonymizationLevels match {
+      case Nil => subsetWithK
+      case head :: tail =>
+        val QID = head.field("field").get.stringOrEmpty
+        val tree = head.field("tree").get
+        val parent = tree.field("parent").get.stringOrEmpty
+        val generalizedField = s"${QID}_$parent"
+        val generalizedChildField = s"$QID${GENERALIZED_POSTFIX}_CHILD"
+        val generalizedValue = tree.field("parent").get.stringOrEmpty
+        val children = tree.field("leaves").get.arrayOrEmpty
+        val df = subsetWithK.transform(transform(generalizedField, generalizedChildField, fullPathMap(QID), QID, generalizedValue, children))
+        prepareAggregationsDF(fullPathMap, QIDs, tail, df)
+    }
+
+  }
+
+  def transform(generalizedField: String, generalizedChildField: String, fullPathMap: mutable.Map[String, mutable.Queue[String]], fieldToScore: String, generalizedValue: String, children: JsonArray)(subsetWithK: DataFrame): DataFrame = {
+    subsetWithK.withColumn(generalizedField, findAncestorUdf(fullPathMap, 0)(subsetWithK(fieldToScore)))
+      .withColumn(generalizedChildField, findAncestorUdf(fullPathMap, 1)(subsetWithK(fieldToScore)))
+      .withColumn(generalizedField + "_RV", when(col(generalizedField) === generalizedValue, col(countColumn)).otherwise(0))
+      .transform(getRVSV(generalizedField, generalizedValue, sensitiveAttributes))
+      .transform(getRVC(generalizedChildField, children))
+      .transform(getRVCSV(generalizedChildField, children, sensitiveAttributes))
+  }
+
+  def getAggregationMap(anonymizationLevels: JsonArray, df: DataFrame): Map[String, Long] = {
+
+    val RVMaps: Map[String, String] = anonymizationLevels.map(AL => {
+      val fieldToScore = AL.field("field").get.stringOrEmpty
+      val tree = AL.field("tree").get
+      val parent = tree.field("parent").get.stringOrEmpty
+      s"${fieldToScore}_${parent}_RV" -> "sum"
+    }).toMap
+
+    val RVSVMaps: Map[String, String] = anonymizationLevels.flatMap(AL => {
+      val fieldToScore = AL.field("field").get.stringOrEmpty
+      val tree = AL.field("tree").get
+      val parent = tree.field("parent").get.stringOrEmpty
+      sensitiveAttributes.map(sensitiveAttribute => {
+        s"${fieldToScore}_${parent}_RVSV_${sensitiveAttributes.indexOf(sensitiveAttribute)}" -> "sum"
+      }).toMap
+    }).toMap
+
+    val RVCMaps: Map[String, String] = anonymizationLevels.flatMap(anonymizationLevel => {
+
+      val fieldToScore = anonymizationLevel.field("field").get.stringOrEmpty
+      val tree = anonymizationLevel.field("tree").get
+      val generalizedChildField = s"$fieldToScore${GENERALIZED_POSTFIX}_CHILD"
+      val children = tree.field("leaves").get.arrayOrEmpty
+      children.map(child => {
+        s"${generalizedChildField}_RVC_${getRoot(child)}" -> "sum"
+      }).toMap
+
+    }).toMap
+
+    val RVCSAMaps: Map[String, String] = anonymizationLevels.flatMap(anonymizationLevel => {
+      val fieldToScore = anonymizationLevel.field("field").get.stringOrEmpty
+      val tree = anonymizationLevel.field("tree").get
+      val generalizedChildField = s"$fieldToScore${GENERALIZED_POSTFIX}_CHILD"
+      val children = tree.field("leaves").get.arrayOrEmpty
+      children.flatMap(child => {
+        sensitiveAttributes.map(sensitiveAttribute => {
+          s"${generalizedChildField}_RVCSV_${getRoot(child)}_${sensitiveAttributes.indexOf(sensitiveAttribute)}" -> "sum"
+        }).toMap
+      }).toMap
+
+    }).toMap
+
+    val aggregations = RVMaps ++ RVSVMaps ++ RVCMaps ++ RVCSAMaps
+
+    val aggregationMapDf = df.agg(aggregations)
+
+    val keys = aggregationMapDf.columns
+    val values = aggregationMapDf.collectAsList()
+
+    keys.zipWithIndex.map(key => {
+      key._1 -> values.get(0).getLong(key._2)
+    }).toMap
+
+  }
+
+  def findBestAL(df: DataFrame, QIDs: List[String], anonymizationLevels: JsonArray): TopScoringAL = {
+
+    val scores: mutable.Map[Double, TopScoringAL] = mutable.Map[Double, TopScoringAL]()
+
+    val aggregationMap = getAggregationMap(anonymizationLevels, df)
+
+    anonymizationLevels.foreach(AL => {
+
+      val QID = AL.field("field").get.stringOrEmpty
+      val tree = AL.field("tree").get
+      val parent = tree.field("parent").get.stringOrEmpty
+
+      scores += (calculateScore(aggregationMap, QID, parent, tree) -> TopScoringAL(QID, parent))
+
+    })
+
+    scores(scores.keys.toList.max)
+
   }
 
 }

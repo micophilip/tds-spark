@@ -43,16 +43,18 @@ class TopDownSpecializationTest extends FunSuite with BeforeAndAfterAll {
     assert(TopDownSpecialization.findAncestor(TopDownSpecialization.buildPathMapFromTree(educationTaxonomyTree.field("leaves").get.arrayOrEmpty.head), null, 0).isEmpty)
   }
 
-  test("calculateScoreOptimized should accurately calculate entropy") {
+  test("calculateScore should accurately calculate score") {
 
     val QIDs = List("education", "sex", "work_hrs", "income")
-
+    val field = "education"
     val subset = input.select(QIDs.head, QIDs.tail: _*)
     val subsetWithK = subset.groupBy(QIDs.head, QIDs.tail: _*).count()
     val educationTree = taxonomyTreeJson.field("education").get
-
-    val score = TopDownSpecialization.calculateScoreOptimized(TopDownSpecialization.buildPathMapFromTree(educationTree), educationTree, subsetWithK, "education")
-
+    val fullPathMap = mutable.Map[String, mutable.Map[String, mutable.Queue[String]]](field -> TopDownSpecialization.buildPathMapFromTree(educationTree))
+    val anonymizationLevels: JsonArray = Json.array(Json("field" -> jString(field), "tree" -> educationTree)).arrayOrEmpty
+    val df = TopDownSpecialization.prepareAggregationsDF(fullPathMap, QIDs, anonymizationLevels, subsetWithK)
+    val aggregationMap = TopDownSpecialization.getAggregationMap(anonymizationLevels, df)
+    val score = TopDownSpecialization.calculateScore(aggregationMap, field, "Any", educationTree)
     assert(score === 0.0151 +- 0.001)
 
   }
