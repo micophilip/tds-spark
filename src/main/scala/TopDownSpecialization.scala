@@ -32,8 +32,7 @@ object TopDownSpecialization extends Serializable {
   def main(args: Array[String]): Unit = {
 
     val inputPath = args(0)
-    val taxonomyTreePath = args(1)
-    val k = args(2).toInt
+    val k = args(1).toInt
     val parallelism = spark.sparkContext.defaultParallelism
 
     println(s"Anonymizing dataset in $inputPath")
@@ -65,7 +64,7 @@ object TopDownSpecialization extends Serializable {
      * Step 2: Generalization
      */
 
-    val taxonomyTreeSource = Source.fromFile(taxonomyTreePath)
+    val taxonomyTreeSource = Source.fromResource("taxonomytree.json")
     val taxonomyTreeString = try taxonomyTreeSource.mkString finally taxonomyTreeSource.close()
     val taxonomyTree = taxonomyTreeString.parseOption.get
     val anonymizationLevels = QIDsOnly.map(QID => {
