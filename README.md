@@ -55,11 +55,24 @@ sudo update-alternatives --config java
 
 ## Performance
 
+Performance when doubling datasets and keeping cluster configuration constant. Time increased by 55-65% when dataset increased by 100%
+
 |Records|k|Nodes|Cores|Partitions|Time (in ms)|
 |---|---|---|---|---|---|
 |250000|100|16|64|64|95352|
 |5000000|100|16|64|64|901938|
 |10000000|100|16|64|64|1486063|
+|20000000|100|16|64|64|2305491|
+
+10-million row speedup test
+
+|nodes|	actual|	optimal|
+|---|---|---|
+|1|	13723016|	13723016|
+|2|	7174442|	6861508|
+|4|	3871286|	3430754|
+|8|	2103755|	1715377|
+|16|	1486063|	857688.5|
 
 
 # Useful documentation
