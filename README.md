@@ -1,6 +1,6 @@
 # Top-Down Specialization on Apache Spark&trade;
 
-Proposed top-down specialization algorithm on Apache Spark for COMP 5704
+Proposed top-down specialization algorithm on Apache Spark
 
 Based on the following papers:
 * [A top-down k-anonymization implementation for Apache Spark](https://ieeexplore-ieee-org.proxy.library.carleton.ca/stamp/stamp.jsp?tp=&arnumber=8258492)
