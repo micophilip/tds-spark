@@ -64,14 +64,16 @@ The dataset in the `src/main/resources` folder is from
  
 ## Performance
 
-Performance when doubling datasets and keeping cluster configuration constant. Time increased by 55-65% when dataset increased by 100%
+Performance when doubling datasets and keeping cluster configuration constant. 
+Time increased by 55-65% when dataset increased by 100%. The following was run with k=100, 16 nodes (4 vCPU each), 
+and 64 partitions.
 
-|Records|k|Nodes|Cores|Partitions|Time (in ms)|
-|---|---|---|---|---|---|
-|250000|100|16|64|64|95352|
-|5000000|100|16|64|64|901938|
-|10000000|100|16|64|64|1486063|
-|20000000|100|16|64|64|2305491|
+|Records|Time (in ms)|
+|---|---|
+|250000|95352|
+|5000000|901938|
+|10000000|1486063|
+|20000000|2305491|
 
 10-million row speedup test
 
