@@ -53,6 +53,15 @@ sudo apt install openjdk-8-jdk -y
 sudo update-alternatives --config java
 ```
 
+## Dataset expansion
+
+The dataset in the `src/main/resources` folder is from
+ [The University of California Irvine](https://archive.ics.uci.edu/ml/datasets/Adult)'s Center for Machine Learning 
+ and Intelligent Systems. However, it only has 32561 rows which was not enough to carry out the performance 
+ tests required. An `ExpandDataset` Scala application is provided in src/main/scala folder. To run expansion:
+ 
+ `$SPARK_HOME/bin/spark-submit --deploy-mode cluster --master spark://$SPARK_MASTER_HOST:7077 --class ExpandDataset --conf spark.sql.shuffle.partitions=16 --conf spark.driver.memory=12g code-assembly-0.1.jar /path/to/output/folder 32561 $TARGET_NUM_ROWS` 
+ 
 ## Performance
 
 Performance when doubling datasets and keeping cluster configuration constant. Time increased by 55-65% when dataset increased by 100%
