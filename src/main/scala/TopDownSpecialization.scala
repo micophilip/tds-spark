@@ -47,7 +47,7 @@ object TopDownSpecialization extends Serializable {
       .option("header", "true")
       .option("mode", "FAILFAST")
       .option("inferSchema", "true")
-      .csv(inputPath).na.drop()
+      .csv(inputPath)
 
     /*
      * Step 1: Pre-processing
@@ -205,7 +205,7 @@ object TopDownSpecialization extends Serializable {
   }
 
   def calculateK(dataset: DataFrame, columns: List[String]): Long = {
-    dataset.groupBy(columns.head, columns.tail: _*).agg(sum("count").alias("sum")).agg(min("sum")).first.getLong(0)
+    dataset.na.drop().groupBy(columns.head, columns.tail: _*).agg(sum("count").alias("sum")).agg(min("sum")).first.getLong(0)
   }
 
   // Breadth-first search
