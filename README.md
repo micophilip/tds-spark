@@ -62,30 +62,6 @@ The dataset in the `src/main/resources` folder is from
  
  `$SPARK_HOME/bin/spark-submit --deploy-mode cluster --master spark://$SPARK_MASTER_HOST:7077 --class ExpandDataset --conf spark.sql.shuffle.partitions=16 --conf spark.driver.memory=12g code-assembly-0.1.jar /path/to/output/folder 32561 $TARGET_NUM_ROWS` 
  
-## Performance
-
-Performance when doubling datasets and keeping cluster configuration constant. 
-Time increased by 55-65% when dataset increased by 100%. The following was run with k=100, 16 nodes (4 vCPU each), 
-and 64 partitions.
-
-|Records|Time (in ms)|
-|---|---|
-|250000|95352|
-|5000000|901938|
-|10000000|1486063|
-|20000000|2305491|
-
-10-million row speedup test
-
-|nodes|	actual|	optimal|
-|---|---|---|
-|1|	13723016|	13723016|
-|2|	7174442|	6861508|
-|4|	3871286|	3430754|
-|8|	2103755|	1715377|
-|16|	1486063|	857688.5|
-
-
 # Useful documentation
 
 [Submitting Applications](https://spark.apache.org/docs/latest/submitting-applications.html)    
