@@ -58,10 +58,17 @@ sudo update-alternatives --config java
 The dataset in the `src/main/resources` folder is from
  [The University of California Irvine](https://archive.ics.uci.edu/ml/datasets/Adult)'s Center for Machine Learning 
  and Intelligent Systems. However, it only has 32561 rows which was not enough to carry out the performance 
- tests required. An `ExpandDataset` Scala application is provided in src/main/scala folder. To run expansion:
+ tests required. An `ExpandDataset` Scala application is provided in `src/main/scala` folder. To run expansion:
  
  `$SPARK_HOME/bin/spark-submit --deploy-mode cluster --master spark://$SPARK_MASTER_HOST:7077 --class ExpandDataset --conf spark.sql.shuffle.partitions=16 --conf spark.driver.memory=12g code-assembly-0.1.jar /path/to/output/folder 32561 $TARGET_NUM_ROWS` 
  
+# Structure of Project
+
+* The source files are in `src/main/scala`. It contains two classes, the main algorithm and the data expansion utility.
+* The `src/main/resources` folder contains the basic adult dataset as well as the taxonomy tree in JSON format.
+* Unit tests are in `src/test/scala`.
+* Performance evaluation experiments are recorded in Excel spreadsheet with 3 tabs in `/data/experiments.xlsx`.
+
 # Useful documentation
 
 [Submitting Applications](https://spark.apache.org/docs/latest/submitting-applications.html)    
