@@ -4,7 +4,7 @@ Proposed top-down specialization algorithm on Apache Spark
 
 Based on the following papers:
 * [U. Sopaoglu and O. Abul. A top-down k-anonymization implementation for apache spark. In 2017 IEEE International Conference on Big Data (Big Data), pages 4513– 4521, December 2017.](https://ieeexplore-ieee-org.proxy.library.carleton.ca/stamp/stamp.jsp?tp=&arnumber=8258492)
-* [B. C. M. Fung, K. Wang, and P. S. Yu. Top-down specialization for information and pri- vacy preservation. In 21st International Conference on Data Engineering (ICDE’05), pages 205–216, April 2005.](https://ieeexplore-ieee-org.proxy.library.carleton.ca/stamp/stamp.jsp?tp=&arnumber=1410123)
+* [B. C. M. Fung, K. Wang, and P. S. Yu. Top-down specialization for information and privacy preservation. In 21st International Conference on Data Engineering (ICDE’05), pages 205–216, April 2005.](https://ieeexplore-ieee-org.proxy.library.carleton.ca/stamp/stamp.jsp?tp=&arnumber=1410123)
 
 # Build
 
