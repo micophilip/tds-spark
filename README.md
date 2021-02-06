@@ -1,8 +1,7 @@
 https://img.shields.io/apm/l/vim-mode?style=flat-square
 <p align="center">
   <a href="https://github.com/micophilip/tds-spark/blob/master/LICENSE" alt="License">
-    <img src=https://img.shields.io/apm/l/vim-mode?style=flat-square/>
-  </a>
+    <img src=https://img.shields.io/apm/l/vim-mode?style=flat-square/></a>
 </p>
 # Top-Down Specialization on Apache Spark&trade;
 
