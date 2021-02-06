@@ -3,6 +3,7 @@
     <img src=https://img.shields.io/apm/l/vim-mode?style=flat-square/>
   </a>
 </p>
+
 # Top-Down Specialization on Apache Spark&trade;
 
 Proposed top-down specialization algorithm on Apache Spark
